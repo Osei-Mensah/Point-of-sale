@@ -1,9 +1,25 @@
 const express = require("express");
+const {
+  verifyToken,
+  isAdmin,
+  isCashierOrAdmin,
+} = require("../middleware/authMiddleware");
 const router = express.Router();
 const db = require("../db");
 
+router.delete("/:id", verifyToken, isAdmin, (req, res) => {
+  const { id } = req.params;
+
+  db.run("DELETE FROM products WHERE id = ?", [id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ message: "Product deleted" });
+  });
+});
 // GET all products
-router.get("/", (req, res) => {
+router.get("/", verifyToken, isCashierOrAdmin, async (req, res) => {
   db.all("SELECT * FROM products", [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -13,7 +29,7 @@ router.get("/", (req, res) => {
 });
 
 // ADD product
-router.post("/", (req, res) => {
+router.post("/", verifyToken, isAdmin, (req, res) => {
   const { name, category, price, quantity, barcode } = req.body;
 
   const sql = `
