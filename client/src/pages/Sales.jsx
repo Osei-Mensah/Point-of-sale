@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../services/api";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 function Sales() {
@@ -11,7 +10,6 @@ function Sales() {
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -133,12 +131,6 @@ function Sales() {
     <div className="grid grid-cols-2 gap-6">
       {/* LEFT: PRODUCTS */}
       <div className="bg-white p-4 rounded shadow">
-        <button
-          onClick={handleLogout}
-          className="mb-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Logout
-        </button>
         <h1 className="text-2xl font-bold mb-4">POINT OF SALE </h1>
         <input
           type="text"
