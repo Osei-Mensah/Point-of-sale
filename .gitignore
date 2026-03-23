@@ -1,3 +1,13 @@
- node_modules
+# dependencies
+node_modules/
+**/node_modules/
+
+# environment
 .env
-dist
+
+# database
+*.db
+
+# build outputs
+dist/
+build/
