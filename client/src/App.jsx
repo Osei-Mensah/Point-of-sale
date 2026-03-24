@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { login } from "./services/authService";
+import SalesHistory from "./pages/SalesHistory";
 import Layout from "./components/Layout";
 
 import Sales from "./pages/Sales";
@@ -123,6 +124,17 @@ function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout title="Products">
               <Products />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/sales-history"
+        element={
+          <ProtectedRoute roles={["admin"]}>
+            <Layout title="Sales History">
+              <SalesHistory />
             </Layout>
           </ProtectedRoute>
         }
