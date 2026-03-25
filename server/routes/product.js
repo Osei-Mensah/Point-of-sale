@@ -48,5 +48,23 @@ router.post("/", verifyToken, isAdmin, (req, res) => {
     });
   });
 });
+// UPDATE product
+router.put("/:id", verifyToken, isAdmin, (req, res) => {
+  const { id } = req.params;
+  const { name, category, price, quantity, barcode } = req.body;
 
+  const sql = `
+    UPDATE products
+    SET name = ?, category = ?, price = ?, quantity = ?, barcode = ?
+    WHERE id = ?
+  `;
+
+  db.run(sql, [name, category, price, quantity, barcode, id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ message: "Product updated successfully" });
+  });
+});
 module.exports = router;

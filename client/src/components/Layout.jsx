@@ -17,6 +17,11 @@ const navItems = [
     path: "/sales-history",
     roles: ["admin"],
   },
+  {
+    name: "Reports",
+    path: "/reports",
+    roles: ["admin"],
+  },
 ];
 function Layout({ children, title }) {
   const { user, logout } = useAuth();

@@ -9,7 +9,11 @@ function Sales() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [amountPaid, setAmountPaid] = useState("");
+
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const change = amountPaid ? amountPaid - total : 0;
+
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -90,12 +94,22 @@ function Sales() {
       alert("Cart is empty!");
       return;
     }
+    // 🚫 Prevent insufficient payment
+    if (Number(amountPaid) < total) {
+      alert("Insufficient payment!");
+      return;
+    }
 
     setLoading(true);
 
     apiFetch("/sales", {
       method: "POST",
-      body: JSON.stringify({ cart, total, paymentMethod }),
+      body: JSON.stringify({
+        cart,
+        total,
+        paymentMethod,
+        amountPaid: Number(amountPaid),
+      }),
     })
       .then((res) => {
         alert("Sale completed!");
@@ -104,6 +118,9 @@ function Sales() {
           id: res.saleId,
           items: cart,
           total: total,
+          amountPaid: Number(amountPaid),
+          change: Number(amountPaid) - total,
+          paymentMethod: paymentMethod,
           date: new Date().toLocaleString(),
         });
 
@@ -150,14 +167,21 @@ function Sales() {
               className={`p-4 rounded shadow transition flex flex-col justify-between cursor-pointer ${
                 product.quantity === 0
                   ? "bg-gray-200 cursor-not-allowed"
-                  : "bg-gray-50 hover:shadow-md"
+                  : product.quantity <= 5
+                    ? "bg-yellow-100 border border-yellow-400"
+                    : "bg-gray-50 hover:shadow-md"
               }`}
             >
               <p className="font-semibold text-lg">{product.name}</p>
-
               <p className="text-gray-600">GHS {product.price}</p>
-
-              <p className="text-sm text-gray-500">Stock: {product.quantity}</p>
+              <p className="text-sm text-gray-500">
+                Stock: {product.quantity}
+                {product.quantity > 0 && product.quantity <= 5 && (
+                  <span className="ml-2 text-yellow-600 font-semibold">
+                    (Low!)
+                  </span>
+                )}
+              </p>{" "}
             </div>
           ))}
         </div>{" "}
@@ -211,6 +235,12 @@ function Sales() {
 
         <div className="border-t pt-4 mt-4">
           <h3 className="text-2xl font-bold">Total: GHS {total}</h3>
+          <p className="mt-2 text-lg">
+            Change
+            <span className={change < 0 ? "text-red-500" : "text-green-600"}>
+              GHS {change}
+            </span>
+          </p>
 
           <select
             value={paymentMethod}
@@ -221,6 +251,14 @@ function Sales() {
             <option>Mobile Money</option>
             <option>Card</option>
           </select>
+
+          <input
+            type="number"
+            placeholder="Amount Paid"
+            value={amountPaid}
+            onChange={(e) => setAmountPaid(e.target.value)}
+            className="mt-2 p-2 border w-full rounded"
+          />
 
           <button
             onClick={handleCheckout}
@@ -237,11 +275,13 @@ function Sales() {
             id="receipt"
             className="mt-6 border-t pt-4 text-sm font-mono max-w-[300px] mx-auto"
           >
-            <h2 className="text-center font-bold text-base">RECEIPT</h2>
+            <h2 className="text-center font-bold text-base">NN VENTURES</h2>
+            <p className="text-center text-xs">Point of Sale System</p>{" "}
             <p className="text-center text-xs">ID: {lastSale.id} </p>
             <p className="text-center text-xs mb-2">{lastSale.date}</p>
+            <div className="border-t border-dashed my-2"></div>
             <p className="text-center text-xs mb-2">
-              Payment: {paymentMethod}
+              Payment: {lastSale.paymentMethod}
             </p>{" "}
             <div className="border-t border-dashed my-2"></div>
             <ul className="space-y-1">
@@ -255,9 +295,18 @@ function Sales() {
               ))}
             </ul>
             <div className="border-t border-dashed my-2"></div>
-            <div className="flex justify-between font-bold">
+            <div className="border-t border-dashed my-2"></div>
+            <div className="flex justify-between">
               <span>Total</span>
               <span>GHS {lastSale.total}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Paid</span>
+              <span>GHS {lastSale.amountPaid}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Change</span>
+              <span>GHS {lastSale.change}</span>
             </div>
             <p className="text-center text-xs mt-3">
               Thank you for your purchase!

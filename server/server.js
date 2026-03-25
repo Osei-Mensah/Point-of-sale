@@ -9,6 +9,7 @@ const app = express();
 const salesRoutes = require("./routes/sales");
 const exportRoutes = require("./routes/export");
 const cookieParser = require("cookie-parser");
+const reportRoutes = require("./routes/reports");
 
 app.use(
   cors({
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use("/export", exportRoutes);
 app.use(cookieParser());
 app.use("/auth", authRoutes);
+app.use("/reports", reportRoutes);
 
 app.get("/", (req, res) => {
   res.send("POS Backend Running 🚀");
