@@ -3,6 +3,9 @@ import { apiFetch } from "../services/api";
 import { useNavigate } from "react-router-dom";
 
 function Sales() {
+  const [audioCtx] = useState(
+    () => new (window.AudioContext || window.webkitAudioContext)(),
+  );
   const [lastSale, setLastSale] = useState(null);
   const [cart, setCart] = useState([]);
   const [products, setProducts] = useState([]);
@@ -10,6 +13,8 @@ function Sales() {
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [amountPaid, setAmountPaid] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [duplicateProducts, setDuplicateProducts] = useState([]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const change = amountPaid ? amountPaid - total : 0;
@@ -34,6 +39,75 @@ function Sales() {
     fetchProducts();
   }, []);
 
+  const handleBarcodeScan = async (barcode) => {
+    try {
+      const products = await apiFetch(`/products/barcode/${barcode}`);
+
+      if (!products || products.error) {
+        alert("Product not found!");
+        return;
+      }
+
+      // 🔴 MULTIPLE PRODUCTS
+      if (products.length > 1) {
+        setDuplicateProducts(products);
+        return;
+      }
+
+      const product = products[0];
+
+      if (product.quantity <= 0) {
+        alert("Product out of stock!");
+        return;
+      }
+
+      // 🔊 Beep
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start();
+      setTimeout(() => oscillator.stop(), 100);
+
+      addToCart(product);
+    } catch (err) {
+      console.error("Barcode scan failed:", err);
+      alert("Error scanning product");
+    }
+  };
+  useEffect(() => {
+    let buffer = "";
+
+    const handleKeyDown = (e) => {
+      // Ignore if user is typing in an input
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.key === "Enter") {
+        if (buffer.length > 0) {
+          handleBarcodeScan(buffer);
+          buffer = "";
+        }
+        return;
+      }
+
+      // Accept letters and numbers
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
   const increaseQty = (id) => {
     const product = products.find((p) => p.id === id);
 
@@ -155,6 +229,19 @@ function Sales() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="mb-4 p-2 border w-full rounded"
+        />
+        <input
+          type="text"
+          placeholder="Scan or type barcode..."
+          value={barcodeInput}
+          onChange={(e) => setBarcodeInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && barcodeInput.trim() !== "") {
+              handleBarcodeScan(barcodeInput.trim());
+              setBarcodeInput("");
+            }
+          }}
+          className="mb-4 p-2 border w-full rounded bg-yellow-50"
         />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto flex-1">
           {" "}
@@ -327,6 +414,36 @@ function Sales() {
       >
         Export Sales (CSV)
       </button>
+
+      {duplicateProducts.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded shadow w-[400px]">
+            <h2 className="text-xl font-bold mb-4">Multiple products found</h2>
+
+            <ul className="space-y-2">
+              {duplicateProducts.map((p) => (
+                <li
+                  key={p.id}
+                  onClick={() => {
+                    addToCart(p);
+                    setDuplicateProducts([]);
+                  }}
+                  className="p-3 border rounded cursor-pointer hover:bg-gray-100"
+                >
+                  {p.name} — GHS {p.price}
+                </li>
+              ))}
+            </ul>
+
+            <button
+              onClick={() => setDuplicateProducts([])}
+              className="mt-4 bg-red-500 text-white px-4 py-2 rounded w-full"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
