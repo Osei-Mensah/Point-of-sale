@@ -13,10 +13,11 @@ export const apiFetch = async (url, options = {}) => {
     }
   }
 
+  const isFormData = options.body instanceof FormData;
   let res = await fetch(`${API_URL}${url}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       Authorization: `Bearer ${token}`,
       ...(options.headers || {}),
     },
@@ -33,7 +34,7 @@ export const apiFetch = async (url, options = {}) => {
       res = await fetch(`${API_URL}${url}`, {
         ...options,
         headers: {
-          "Content-Type": "application/json",
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
           Authorization: `Bearer ${token}`,
           ...(options.headers || {}),
         },

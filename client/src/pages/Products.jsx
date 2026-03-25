@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../services/api";
+import Papa from "papaparse";
 
 function Products() {
   const [products, setProducts] = useState([]);
@@ -11,6 +12,9 @@ function Products() {
     barcode: "",
   });
   const [editingId, setEditingId] = useState(null);
+  const [file, setFile] = useState(null);
+  const [previewData, setPreviewData] = useState([]);
+  const [validationErrors, setValidationErrors] = useState([]);
 
   const handleChange = (e) => {
     setForm({
@@ -57,6 +61,97 @@ function Products() {
       .then((data) => setProducts(data))
       .catch((err) => console.error(err));
   };
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+
+    setValidationErrors([]);
+    setPreviewData([]);
+    setFile(selectedFile);
+
+    Papa.parse(selectedFile, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const data = results.data;
+
+        if (!data.length) {
+          alert("CSV is empty");
+          return;
+        }
+
+        // ✅ Required headers
+        const requiredHeaders = ["name", "price"];
+
+        const headers = Object.keys(data[0]);
+        const missingHeaders = requiredHeaders.filter(
+          (h) => !headers.includes(h),
+        );
+
+        if (missingHeaders.length > 0) {
+          alert(`Missing headers: ${missingHeaders.join(", ")}`);
+          setPreviewData([]);
+          return;
+        }
+
+        const errors = [];
+
+        data.forEach((row, index) => {
+          const name = row.name?.trim();
+          const price = Number(row.price);
+
+          if (!name || isNaN(price)) {
+            errors.push(`Row ${index + 1}: Invalid name or price`);
+          }
+        });
+
+        setValidationErrors(errors);
+
+        // Show first 5 rows
+        setPreviewData(data.slice(0, 5));
+      },
+    });
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      alert("Please select a file");
+      return;
+    }
+
+    if (validationErrors.length > 0) {
+      alert("Fix CSV errors before uploading");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const data = await apiFetch("/products/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+
+      alert(
+        `Import done!\nInserted: ${data.inserted}\nSkipped: ${data.skipped}`,
+      );
+
+      // Refresh products
+      const updated = await apiFetch("/products");
+      setProducts(updated);
+    } catch (err) {
+      console.error(err);
+      alert("Import failed");
+    }
+  };
+
   useEffect(() => {
     apiFetch("/products")
       .then((data) => {
@@ -143,6 +238,68 @@ function Products() {
           </button>
         )}
       </form>
+
+      <div className="mb-6">
+        <h2 className="text-xl font-bold mb-2">Import Products (CSV)</h2>
+
+        <input
+          type="file"
+          accept=".csv"
+          onChange={handleFileChange}
+          className="mb-2"
+        />
+
+        <button
+          onClick={handleImport}
+          className="bg-green-600 text-white px-4 py-2 rounded"
+        >
+          Upload CSV
+        </button>
+
+        {previewData.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-bold mb-2">Preview (first 5 rows)</h3>
+            <p className="text-sm text-gray-600">
+              Total rows: {previewData.length}
+            </p>
+
+            <table className="w-full border text-sm">
+              <thead>
+                <tr>
+                  {Object.keys(previewData[0]).map((key) => (
+                    <th key={key} className="border p-1">
+                      {key}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {previewData.map((row, i) => (
+                  <tr key={i}>
+                    {Object.values(row).map((val, j) => (
+                      <td key={j} className="border p-1">
+                        {val}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {validationErrors.length > 0 && (
+          <div className="mt-4 text-red-600">
+            <h3 className="font-bold">Validation Errors:</h3>
+            <ul>
+              {validationErrors.slice(0, 5).map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+            <p>Fix errors before uploading.</p>
+          </div>
+        )}
+      </div>
       {products.length === 0 ? (
         <p>No products yet</p>
       ) : (
