@@ -42,7 +42,9 @@ function SalesHistory() {
             <thead>
               <tr className="border-b">
                 <th className="text-left p-2">ID</th>
-                <th className="text-left p-2">Total (GHS)</th>
+                <th className="text-left p-2">Total</th>
+                <th className="text-left p-2">Paid</th>
+                <th className="text-left p-2">Change</th>
                 <th className="text-left p-2">Payment</th>
                 <th className="text-left p-2">Date</th>
               </tr>
@@ -69,7 +71,9 @@ function SalesHistory() {
                   className="border-b hover:bg-gray-100 cursor-pointer"
                 >
                   <td className="p-2">{sale.id}</td>
-                  <td className="p-2">{sale.total_amount}</td>
+                  <td className="p-2">GHS {sale.total_amount}</td>
+                  <td className="p-2">GHS {sale.amount_paid || 0}</td>
+                  <td className="p-2">GHS {sale.change || 0}</td>
                   <td className="p-2">{sale.payment_method || "—"}</td>
                   <td className="p-2">{sale.created_at || "—"}</td>
                 </tr>
@@ -87,6 +91,8 @@ function SalesHistory() {
           <div className="text-sm text-gray-600 mb-4 space-y-1">
             <p>Date: {selectedSale.created_at || "—"}</p>
             <p>Payment: {selectedSale.payment_method || "—"}</p>
+            <p>Amount Paid: GHS {selectedSale.amount_paid || 0}</p>
+            <p>Change: GHS {selectedSale.change || 0}</p>
             <p className="font-semibold">
               Total: GHS {selectedSale.total_amount}
             </p>

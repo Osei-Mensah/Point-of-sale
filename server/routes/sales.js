@@ -7,7 +7,8 @@ const {
 } = require("../middleware/authMiddleware");
 
 router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
-  const { cart, total, paymentMethod } = req.body;
+  const { cart, total, paymentMethod, amountPaid } = req.body;
+  const change = amountPaid - total;
   const userId = req.user.id;
 
   if (!cart || cart.length === 0) {
@@ -18,9 +19,9 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
     db.run("BEGIN TRANSACTION");
 
     db.run(
-      `INSERT INTO sales (total_amount, payment_method, user_id, created_at)
-   VALUES (?, ?, ?, datetime('now'))`,
-      [total, paymentMethod, userId],
+      `INSERT INTO sales (total_amount, payment_method, user_id, amount_paid, change, created_at)
+VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [total, paymentMethod, userId, amountPaid, change],
       function (err) {
         if (err) {
           db.run("ROLLBACK");
@@ -112,7 +113,7 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
 // GET all sales
 router.get("/", verifyToken, isCashierOrAdmin, (req, res) => {
   const query = `
-  SELECT id, total_amount, payment_method, user_id, created_at
+  SELECT id, total_amount, payment_method, user_id, amount_paid, change, created_at
   FROM sales
   ORDER BY created_at DESC
 `;

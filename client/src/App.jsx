@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { login } from "./services/authService";
 import SalesHistory from "./pages/SalesHistory";
 import Layout from "./components/Layout";
+import Reports from "./pages/Reports";
 
 import Sales from "./pages/Sales";
 import Products from "./pages/Products";
@@ -135,6 +136,16 @@ function App() {
           <ProtectedRoute roles={["admin"]}>
             <Layout title="Sales History">
               <SalesHistory />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute roles={["admin"]}>
+            <Layout title="Reports">
+              <Reports />
             </Layout>
           </ProtectedRoute>
         }
