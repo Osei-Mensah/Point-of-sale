@@ -10,6 +10,7 @@ const salesRoutes = require("./routes/sales");
 const exportRoutes = require("./routes/export");
 const cookieParser = require("cookie-parser");
 const reportRoutes = require("./routes/reports");
+const paymentRoutes = require("./routes/payments");
 
 app.use(
   cors({
@@ -34,6 +35,7 @@ app.get("/admin-only", verifyToken, isAdmin, (req, res) => {
 
 app.use("/products", productRoutes);
 app.use("/sales", salesRoutes);
+app.use("/payments", paymentRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
