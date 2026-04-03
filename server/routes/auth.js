@@ -87,7 +87,7 @@ router.post("/login", (req, res) => {
 
     // 4. Generate Access Token
     const accessToken = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, email: user.email },
       process.env.JWT_ACCESS_SECRET,
       { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
     );
@@ -165,7 +165,7 @@ router.post("/refresh", (req, res) => {
         // 3. Generate new access token
         // 🔥 First get user from DB
         db.get(
-          "SELECT role FROM users WHERE id = ?",
+          "SELECT role, email FROM users WHERE id = ?",
           [decoded.id],
           (err, user) => {
             if (err || !user) {
@@ -173,7 +173,11 @@ router.post("/refresh", (req, res) => {
             }
 
             const newAccessToken = jwt.sign(
-              { id: decoded.id, role: user.role }, // ✅ INCLUDE ROLE
+              {
+                id: decoded.id,
+                role: user.role,
+                email: user.email,
+              },
               process.env.JWT_ACCESS_SECRET,
               { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
             );

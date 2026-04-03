@@ -1,12 +1,15 @@
+import { useAuth } from "../context/AuthContext";
 import { useState, useEffect } from "react";
 import { apiFetch } from "../services/api";
 import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 function Sales() {
   const [audioCtx] = useState(
     () => new (window.AudioContext || window.webkitAudioContext)(),
   );
   const [lastSale, setLastSale] = useState(null);
+  const [verifiedRef, setVerifiedRef] = useState(null);
   const [cart, setCart] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -15,11 +18,25 @@ function Sales() {
   const [amountPaid, setAmountPaid] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [duplicateProducts, setDuplicateProducts] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [pointsToUse, setPointsToUse] = useState("");
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    phone: "",
+    email: "",
+  });
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const change = amountPaid ? amountPaid - total : 0;
+  const discount = Math.floor(pointsToUse / 10);
+  const finalTotal = total - discount;
 
+  const change = amountPaid ? amountPaid - finalTotal : 0;
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
 
   const handleLogout = async () => {
     await logout();
@@ -39,6 +56,83 @@ function Sales() {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const reference = params.get("reference");
+
+    // 🚫 Prevent duplicate verification
+    if (!reference || reference === verifiedRef) return;
+
+    setVerifiedRef(reference);
+
+    console.log("Payment reference detected:", reference);
+
+    setLoading(true);
+
+    apiFetch("/payments/verify", {
+      method: "POST",
+      body: JSON.stringify({ reference }),
+    })
+      .then((res) => {
+        // 🔥 Fetch real sale from backend
+        return apiFetch(`/sales/${res.saleId}`);
+      })
+      .then((sale) => {
+        setLastSale({
+          id: sale.id,
+          items: sale.items,
+          total: sale.total_amount,
+          amountPaid: sale.amount_paid,
+          change: sale.change,
+          paymentMethod: sale.payment_method,
+          date: new Date(sale.created_at).toLocaleString(),
+        });
+
+        setCart([]);
+        setSelectedCustomer(null);
+        setCustomerSearch("");
+        setPointsToUse("");
+
+        return apiFetch("/products");
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setProducts(data);
+        }
+
+        // 🔴 Clean URL (remove reference param)
+        navigate("/sales", { replace: true });
+      })
+      .catch((err) => {
+        console.error("Verification error:", err);
+
+        // 🔴 HANDLE ALREADY PROCESSED PAYMENT (VERY IMPORTANT)
+        const errorMessage =
+          err?.response?.error || err?.error || err?.message || "";
+
+        if (errorMessage.includes("already been processed")) {
+          console.warn("Payment already processed via webhook");
+
+          setLastSale({
+            id: "Already Processed",
+            items: cart,
+            total: total,
+            amountPaid: total,
+            change: 0,
+            paymentMethod: "Paystack",
+            date: new Date().toLocaleString(),
+          });
+
+          setCart([]);
+          navigate("/sales", { replace: true });
+          return;
+        }
+        alert("Payment verification failed");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [location.search, verifiedRef]);
   const handleBarcodeScan = async (barcode) => {
     try {
       const products = await apiFetch(`/products/barcode/${barcode}`);
@@ -125,6 +219,21 @@ function Sales() {
     );
   };
 
+  useEffect(() => {
+    if (!customerSearch) {
+      setCustomers([]);
+      return;
+    }
+
+    const delayDebounce = setTimeout(() => {
+      apiFetch(`/customers?search=${customerSearch}`)
+        .then((data) => setCustomers(data))
+        .catch((err) => console.error(err));
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [customerSearch]);
+
   const decreaseQty = (id) => {
     setCart(
       cart
@@ -162,61 +271,185 @@ function Sales() {
     }
   };
 
-  const handleCheckout = () => {
-    // 🚫 Prevent empty cart
+  const handleCheckout = async () => {
     if (cart.length === 0) {
       alert("Cart is empty!");
       return;
     }
-    // 🚫 Prevent insufficient payment
-    if (Number(amountPaid) < total) {
-      alert("Insufficient payment!");
+
+    if (!user || !user.email) {
+      alert("User not authenticated properly");
       return;
     }
 
-    setLoading(true);
+    const discount = Math.floor(pointsToUse / 10);
+    const finalTotal = total - discount;
 
-    apiFetch("/sales", {
-      method: "POST",
-      body: JSON.stringify({
-        cart,
-        total,
-        paymentMethod,
-        amountPaid: Number(amountPaid),
-      }),
-    })
-      .then((res) => {
-        alert("Sale completed!");
+    // ✅ CASH FLOW
+    if (paymentMethod === "Cash") {
+      if (Number(amountPaid) < finalTotal) {
+        alert("Insufficient payment!");
+        return;
+      }
+
+      setLoading(true);
+
+      apiFetch("/sales", {
+        method: "POST",
+        body: JSON.stringify({
+          cart,
+          total,
+          paymentMethod: "cash",
+          amountPaid: Number(amountPaid),
+          customer_id: selectedCustomer?.id || null,
+          points_used: Number(pointsToUse) || 0,
+        }),
+      })
+        .then((res) => apiFetch(`/sales/${res.saleId}`))
+        .then((sale) => {
+          setLastSale({
+            id: sale.id,
+            items: sale.items,
+            total: sale.total_amount,
+            amountPaid: sale.amount_paid,
+            change: sale.change,
+            paymentMethod: sale.payment_method,
+            date: new Date(sale.created_at).toLocaleString(),
+          });
+
+          setCart([]);
+          setSelectedCustomer(null);
+          setCustomerSearch("");
+          setPointsToUse("");
+        })
+        .finally(() => setLoading(false));
+
+      return;
+    }
+
+    if (finalTotal <= 0) {
+      alert("Invalid amount");
+      return;
+    }
+
+    // ✅ MOBILE MONEY FLOW (OTP)
+    if (paymentMethod === "Mobile Money") {
+      if (!selectedCustomer) {
+        alert("Select a customer for Mobile Money");
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        await apiFetch("/otp/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            customer_id: selectedCustomer.id,
+          }),
+        });
+
+        const userOtp = prompt("Enter OTP sent to customer email:");
+
+        if (!userOtp) {
+          setLoading(false);
+          return;
+        }
+
+        await apiFetch("/otp/verify", {
+          method: "POST",
+          body: JSON.stringify({
+            customer_id: selectedCustomer.id,
+            otp: userOtp,
+          }),
+        });
+
+        // 🔥 AFTER OTP → COMPLETE SALE
+        const res = await apiFetch("/sales", {
+          method: "POST",
+          body: JSON.stringify({
+            cart,
+            total,
+            paymentMethod: "mobile_money",
+            amountPaid: finalTotal,
+            customer_id: selectedCustomer?.id || null,
+            points_used: Number(pointsToUse) || 0,
+          }),
+        });
+
+        const sale = await apiFetch(`/sales/${res.saleId}`);
 
         setLastSale({
-          id: res.saleId,
-          items: cart,
-          total: total,
-          amountPaid: Number(amountPaid),
-          change: Number(amountPaid) - total,
-          paymentMethod: paymentMethod,
-          date: new Date().toLocaleString(),
+          id: sale.id,
+          items: sale.items,
+          total: sale.total_amount,
+          amountPaid: sale.amount_paid,
+          change: sale.change,
+          paymentMethod: sale.payment_method,
+          date: new Date(sale.created_at).toLocaleString(),
         });
 
         setCart([]);
+        setSelectedCustomer(null);
+        setCustomerSearch("");
+        setPointsToUse("");
+      } catch (err) {
+        alert(err?.error || err?.message || "OTP verification failed");
+      }
 
-        // Refresh products
-        return apiFetch("/products");
-      })
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setProducts(data);
-        } else {
-          console.error("Invalid products response:", data);
+      setLoading(false);
+      return;
+    }
+    // ✅ PAYSTACK FLOW
+    setLoading(true);
+
+    apiFetch("/payments/initialize", {
+      method: "POST",
+      body: JSON.stringify({
+        email: user.email,
+        amount: finalTotal,
+        cart,
+        customer_id: selectedCustomer?.id || null,
+        points_used: Number(pointsToUse) || 0,
+      }),
+    })
+      .then((res) => {
+        console.log("PAYSTACK INIT RESPONSE:", res);
+        if (!res.authorization_url) {
+          console.error("Invalid Paystack response:", res);
+          alert("Payment initialization failed");
+          setLoading(false);
+          return;
         }
+
+        window.location.href = res.authorization_url;
       })
       .catch((err) => {
-        console.error(err);
-        alert("Something went wrong!");
-      })
-      .finally(() => {
+        console.error("Payment init error:", err);
+        alert(err?.error || "Payment failed");
         setLoading(false);
       });
+  };
+
+  const handleCreateCustomer = async () => {
+    try {
+      const data = await apiFetch("/customers", {
+        method: "POST",
+        body: JSON.stringify(newCustomer),
+      });
+
+      // ✅ Auto-select new customer
+      setSelectedCustomer(data.customer || newCustomer);
+      setCustomerSearch(newCustomer.name);
+
+      // Reset form
+      setShowAddCustomer(false);
+      setNewCustomer({ name: "", phone: "", email: "" });
+      setCustomers([]);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create customer");
+    }
   };
   return (
     <div className="flex h-full gap-6">
@@ -320,6 +553,119 @@ function Sales() {
           )}
         </div>
 
+        <div className="mb-4">
+          <label className="block font-semibold">Customer</label>
+
+          <input
+            type="text"
+            placeholder="Search by name, phone, email..."
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            className="border p-2 w-full"
+          />
+
+          {customers.length > 0 && (
+            <div className="border bg-white max-h-40 overflow-y-auto">
+              {customers.map((c) => (
+                <div
+                  key={c.id}
+                  className="p-2 hover:bg-gray-100 cursor-pointer"
+                  onClick={() => {
+                    setSelectedCustomer(c);
+                    setCustomerSearch(c.name);
+                    setCustomers([]);
+                  }}
+                >
+                  {c.name} — {c.phone}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {customerSearch && customers.length === 0 && (
+            <div className="border p-2 bg-yellow-50">
+              <p className="text-sm mb-2">No customer found</p>
+              <button
+                className="bg-blue-500 text-white px-2 py-1"
+                onClick={() => setShowAddCustomer(true)}
+              >
+                Add New Customer
+              </button>
+            </div>
+          )}
+
+          {showAddCustomer && (
+            <div className="border p-3 mt-2 bg-gray-50">
+              <h4 className="font-semibold mb-2">New Customer</h4>
+
+              <input
+                type="text"
+                placeholder="Name"
+                className="border p-1 w-full mb-2"
+                value={newCustomer.name}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, name: e.target.value })
+                }
+              />
+
+              <input
+                type="text"
+                placeholder="Phone"
+                className="border p-1 w-full mb-2"
+                value={newCustomer.phone}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, phone: e.target.value })
+                }
+              />
+
+              <input
+                type="email"
+                placeholder="Email"
+                className="border p-1 w-full mb-2"
+                value={newCustomer.email}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, email: e.target.value })
+                }
+              />
+
+              <button
+                className="bg-green-500 text-white px-3 py-1"
+                onClick={handleCreateCustomer}
+              >
+                Save Customer
+              </button>
+            </div>
+          )}
+          {selectedCustomer && (
+            <div className="mt-2 text-sm text-green-600">
+              Selected: {selectedCustomer.name}
+              <br />
+              Points: {selectedCustomer.points || 0}
+            </div>
+          )}
+        </div>
+        {selectedCustomer && (
+          <div className="mb-4">
+            <label className="block font-semibold">Use Points</label>
+            <input
+              type="number"
+              placeholder="Enter points to redeem"
+              value={pointsToUse}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+
+                if (selectedCustomer && value > selectedCustomer.points) {
+                  alert("Cannot use more points than available");
+                  return;
+                }
+
+                setPointsToUse(value);
+              }}
+              className="border p-2 w-full"
+            />
+          </div>
+        )}
+
         <div className="border-t pt-4 mt-4">
           <h3 className="text-2xl font-bold">Total: GHS {total}</h3>
           <p className="mt-2 text-lg">
@@ -347,6 +693,12 @@ function Sales() {
             className="mt-2 p-2 border w-full rounded"
           />
 
+          {selectedCustomer && pointsToUse > 0 && (
+            <div className="text-sm text-blue-600 mt-2">
+              Discount: GHS {Math.floor(pointsToUse / 10)} <br />
+              Final Total: GHS {total - Math.floor(pointsToUse / 10)}
+            </div>
+          )}
           <button
             onClick={handleCheckout}
             disabled={loading}
@@ -392,8 +744,12 @@ function Sales() {
               <span>GHS {lastSale.amountPaid}</span>
             </div>
             <div className="flex justify-between font-bold">
-              <span>Change</span>
-              <span>GHS {lastSale.change}</span>
+              {lastSale.paymentMethod === "cash" && (
+                <div className="flex justify-between font-bold">
+                  <span>Change</span>
+                  <span>GHS {lastSale.change}</span>
+                </div>
+              )}
             </div>
             <p className="text-center text-xs mt-3">
               Thank you for your purchase!
