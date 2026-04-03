@@ -1,8 +1,18 @@
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
 require("dotenv").config();
+require("./db");
+require("./initDB");
+require("./migrations/add_customers_table");
+require("./migrations/add_customer_id_to_sales");
+
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const { verifyToken, isAdmin } = require("./middleware/authMiddleware");
+const customerRoutes = require("./routes/customers");
 
 const productRoutes = require("./routes/product");
 const app = express();
@@ -18,7 +28,16 @@ app.use(
     credentials: true, // VERY IMPORTANT
   }),
 );
-app.use(express.json());
+// ⚠️ RAW BODY for Paystack webhook ONLY
+app.use((req, res, next) => {
+  if (req.originalUrl === "/payments/webhook") {
+    express.raw({ type: "*/*" })(req, res, next);
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
+app.use("/otp", require("./routes/otp"));
 app.use("/export", exportRoutes);
 app.use(cookieParser());
 app.use("/auth", authRoutes);
@@ -36,6 +55,7 @@ app.get("/admin-only", verifyToken, isAdmin, (req, res) => {
 app.use("/products", productRoutes);
 app.use("/sales", salesRoutes);
 app.use("/payments", paymentRoutes);
+app.use("/customers", customerRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

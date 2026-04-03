@@ -11,3 +11,9 @@ node_modules/
 # build outputs
 dist/
 build/
+
+# Database files
+database/*.db
+database/*.db-shm
+database/*.db-wal
+database/*.db-journal

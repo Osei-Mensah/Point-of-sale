@@ -43,5 +43,11 @@ export const apiFetch = async (url, options = {}) => {
     }
   }
 
-  return res.json();
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw data;
+  }
+
+  return data;
 };
