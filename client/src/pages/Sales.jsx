@@ -2,8 +2,30 @@ import { useAuth } from "../context/AuthContext";
 import { useState, useEffect } from "react";
 import { apiFetch } from "../services/api";
 import { useNavigate } from "react-router-dom";
+
 import { useLocation } from "react-router-dom";
 
+const getProvider = (phone) => {
+  if (
+    phone.startsWith("024") ||
+    phone.startsWith("054") ||
+    phone.startsWith("055")
+  )
+    return "mtn";
+
+  if (phone.startsWith("020") || phone.startsWith("050")) return "vod";
+
+  if (phone.startsWith("027") || phone.startsWith("057")) return "tigo";
+
+  return "mtn"; // fallback
+};
+
+const formatPhone = (phone) => {
+  if (phone.startsWith("0")) {
+    return "233" + phone.slice(1);
+  }
+  return phone;
+};
 function Sales() {
   const [audioCtx] = useState(
     () => new (window.AudioContext || window.webkitAudioContext)(),
@@ -332,72 +354,39 @@ function Sales() {
       return;
     }
 
-    // ✅ MOBILE MONEY FLOW (OTP)
     if (paymentMethod === "Mobile Money") {
       if (!selectedCustomer) {
-        alert("Select a customer for Mobile Money");
+        alert("Select a customer");
+        return;
+      }
+
+      if (!selectedCustomer.phone) {
+        alert("Customer must have a phone number");
         return;
       }
 
       setLoading(true);
 
       try {
-        await apiFetch("/otp/generate", {
+        const res = await apiFetch("/payments/initialize", {
           method: "POST",
           body: JSON.stringify({
-            customer_id: selectedCustomer.id,
-          }),
-        });
-
-        const userOtp = prompt("Enter OTP sent to customer email:");
-
-        if (!userOtp) {
-          setLoading(false);
-          return;
-        }
-
-        await apiFetch("/otp/verify", {
-          method: "POST",
-          body: JSON.stringify({
-            customer_id: selectedCustomer.id,
-            otp: userOtp,
-          }),
-        });
-
-        // 🔥 AFTER OTP → COMPLETE SALE
-        const res = await apiFetch("/sales", {
-          method: "POST",
-          body: JSON.stringify({
+            email: selectedCustomer.email || user.email,
+            amount: finalTotal,
             cart,
-            total,
-            paymentMethod: "mobile_money",
-            amountPaid: finalTotal,
-            customer_id: selectedCustomer?.id || null,
+            customer_id: selectedCustomer.id,
             points_used: Number(pointsToUse) || 0,
+            phone: formatPhone(selectedCustomer.phone),
+            provider: getProvider(selectedCustomer.phone),
           }),
         });
 
-        const sale = await apiFetch(`/sales/${res.saleId}`);
-
-        setLastSale({
-          id: sale.id,
-          items: sale.items,
-          total: sale.total_amount,
-          amountPaid: sale.amount_paid,
-          change: sale.change,
-          paymentMethod: sale.payment_method,
-          date: new Date(sale.created_at).toLocaleString(),
-        });
-
-        setCart([]);
-        setSelectedCustomer(null);
-        setCustomerSearch("");
-        setPointsToUse("");
+        window.location.href = res.authorization_url;
       } catch (err) {
-        alert(err?.error || err?.message || "OTP verification failed");
+        alert("Payment failed");
+        setLoading(false);
       }
 
-      setLoading(false);
       return;
     }
     // ✅ PAYSTACK FLOW

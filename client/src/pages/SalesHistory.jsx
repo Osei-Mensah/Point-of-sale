@@ -57,11 +57,12 @@ function SalesHistory() {
                   onClick={async () => {
                     try {
                       setDetailsLoading(true);
-                      setSelectedSale(sale);
                       setSaleItems([]);
 
                       const data = await apiFetch(`/sales/${sale.id}`);
-                      setSaleItems(data);
+
+                      setSelectedSale(data);
+                      setSaleItems(data.items || []);
                     } catch (err) {
                       console.error("Failed to fetch sale details:", err);
                     } finally {
@@ -114,8 +115,8 @@ function SalesHistory() {
               </thead>
 
               <tbody>
-                {saleItems.map((item) => (
-                  <tr key={item.id} className="border-b">
+                {saleItems.map((item, index) => (
+                  <tr key={`${item.product_id}-${index}`} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.quantity}</td>
                     <td className="p-2">{item.price}</td>

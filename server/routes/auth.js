@@ -60,19 +60,21 @@ router.post("/register", async (req, res) => {
 });
 
 // LOGIN USER
-router.post("/login", (req, res) => {
-  const { email, password } = req.body;
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  // 1. Validate input
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required" });
-  }
-
-  // 2. Find user
-  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+    // 1. Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
     }
+
+    // 2. Find user
+    const userResult = await db.query("SELECT * FROM users WHERE email = $1", [
+      email,
+    ]);
+
+    const user = userResult.rows[0];
 
     if (!user) {
       return res.status(400).json({ error: "Invalid credentials" });
@@ -87,131 +89,156 @@ router.post("/login", (req, res) => {
 
     // 4. Generate Access Token
     const accessToken = jwt.sign(
-      { id: user.id, role: user.role, email: user.email },
+      {
+        id: user.id,
+        role: user.role,
+        email: user.email,
+      },
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
+      {
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+      },
     );
 
     // 5. Generate Refresh Token
     const refreshToken = jwt.sign(
       { id: user.id },
       process.env.JWT_REFRESH_SECRET,
-      { expiresIn: process.env.REFRESH_TOKEN_EXPIRY },
+      {
+        expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+      },
     );
 
-    // 6. Store Refresh Token in DB
+    // 6. Store Refresh Token
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    db.run(
-      `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)`,
+    await db.query(
+      `
+      INSERT INTO refresh_tokens (user_id, token, expires_at)
+      VALUES ($1, $2, $3)
+      `,
       [user.id, refreshToken, expiresAt.toISOString()],
-      (err) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-
-        // 7. Send Refresh Token as HTTP-only cookie
-        res.cookie("refreshToken", refreshToken, {
-          httpOnly: true,
-          secure: false, // change to true in production (HTTPS)
-          sameSite: "strict",
-        });
-
-        // 8. Send Access Token
-        res.json({
-          message: "Login successful",
-          accessToken,
-          user: {
-            id: user.id,
-            name: user.name,
-            role: user.role,
-          },
-        });
-      },
     );
-  });
-});
 
-// REFRESH ACCESS TOKEN
-router.post("/refresh", (req, res) => {
-  const token = req.cookies.refreshToken;
-
-  if (!token) {
-    return res.status(401).json({ error: "No refresh token provided" });
-  }
-
-  // 1. Check if token exists in DB
-  db.get(
-    "SELECT * FROM refresh_tokens WHERE token = ?",
-    [token],
-    (err, storedToken) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-
-      if (!storedToken) {
-        return res.status(403).json({ error: "Invalid refresh token" });
-      }
-
-      // 2. Verify token
-      jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
-        if (err) {
-          return res
-            .status(403)
-            .json({ error: "Expired or invalid refresh token" });
-        }
-
-        // 3. Generate new access token
-        // 🔥 First get user from DB
-        db.get(
-          "SELECT role, email FROM users WHERE id = ?",
-          [decoded.id],
-          (err, user) => {
-            if (err || !user) {
-              return res.status(500).json({ error: "User not found" });
-            }
-
-            const newAccessToken = jwt.sign(
-              {
-                id: decoded.id,
-                role: user.role,
-                email: user.email,
-              },
-              process.env.JWT_ACCESS_SECRET,
-              { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
-            );
-
-            res.json({ accessToken: newAccessToken });
-          },
-        );
-      });
-    },
-  );
-});
-
-// LOGOUT USER
-router.post("/logout", (req, res) => {
-  const token = req.cookies.refreshToken;
-
-  if (!token) {
-    return res.status(400).json({ error: "No refresh token provided" });
-  }
-
-  // 1. Delete token from DB
-  db.run("DELETE FROM refresh_tokens WHERE token = ?", [token], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    // 2. Clear cookie
-    res.clearCookie("refreshToken", {
+    // 7. Send cookie
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false, // set true in production
+      secure: false,
       sameSite: "strict",
     });
 
-    return res.json({ message: "Logged out successfully" });
-  });
+    // 8. Send response
+    res.json({
+      message: "Login successful",
+      accessToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// REFRESH ACCESS TOKEN
+router.post("/refresh", async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken;
+
+    if (!token) {
+      return res.status(401).json({ error: "No refresh token provided" });
+    }
+
+    // 1. Check token in DB
+    const tokenResult = await db.query(
+      "SELECT * FROM refresh_tokens WHERE token = $1",
+      [token],
+    );
+
+    const storedToken = tokenResult.rows[0];
+
+    if (!storedToken) {
+      return res.status(403).json({
+        error: "Invalid refresh token",
+      });
+    }
+
+    // 2. Verify JWT
+    jwt.verify(token, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+      if (err) {
+        return res.status(403).json({
+          error: "Expired or invalid refresh token",
+        });
+      }
+
+      // 3. Get user
+      const userResult = await db.query(
+        "SELECT role, email FROM users WHERE id = $1",
+        [decoded.id],
+      );
+
+      const user = userResult.rows[0];
+
+      if (!user) {
+        return res.status(404).json({
+          error: "User not found",
+        });
+      }
+
+      // 4. Generate new access token
+      const newAccessToken = jwt.sign(
+        {
+          id: decoded.id,
+          role: user.role,
+          email: user.email,
+        },
+        process.env.JWT_ACCESS_SECRET,
+        {
+          expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+        },
+      );
+
+      res.json({
+        accessToken: newAccessToken,
+      });
+    });
+  } catch (error) {
+    console.error("REFRESH TOKEN ERROR:", error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+// LOGOUT USER
+router.post("/logout", async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken;
+
+    if (token) {
+      await db.query("DELETE FROM refresh_tokens WHERE token = $1", [token]);
+    }
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+    });
+
+    res.json({
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("LOGOUT ERROR:", error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 module.exports = router;

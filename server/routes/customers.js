@@ -61,30 +61,33 @@ router.post("/", verifyToken, (req, res) => {
 });
 
 // 🔍 SEARCH CUSTOMERS
-router.get("/", verifyToken, (req, res) => {
-  const search = req.query.search || "";
+router.get("/", verifyToken, async (req, res) => {
+  try {
+    const search = req.query.search || "";
+    const searchTerm = `%${search}%`;
 
-  const query = `
-  SELECT id, name, phone, email, points
-  FROM customers
-  WHERE (
-    name LIKE ?
-    OR phone LIKE ?
-    OR email LIKE ?
-  )
-  ORDER BY created_at DESC
-  LIMIT 20
-`;
+    const result = await db.query(
+      `
+      SELECT id, name, phone, email, points
+      FROM customers
+      WHERE (
+        name ILIKE $1
+        OR phone ILIKE $1
+        OR email ILIKE $1
+      )
+      ORDER BY created_at DESC
+      LIMIT 20
+      `,
+      [searchTerm],
+    );
 
-  const searchTerm = `%${search}%`;
+    return res.json(result.rows);
+  } catch (error) {
+    console.error("CUSTOMER SEARCH ERROR:", error);
 
-  db.all(query, [searchTerm, searchTerm, searchTerm], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    return res.json(rows);
-  });
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
 });
-
 module.exports = router;

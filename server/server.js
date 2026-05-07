@@ -4,9 +4,9 @@ process.on("uncaughtException", (err) => {
 
 require("dotenv").config();
 require("./db");
-require("./initDB");
-require("./migrations/add_customers_table");
-require("./migrations/add_customer_id_to_sales");
+// require("./initDB");
+// require("./migrations/add_customers_table");
+// require("./migrations/add_customer_id_to_sales");
 
 const express = require("express");
 const cors = require("cors");
@@ -28,14 +28,9 @@ app.use(
     credentials: true, // VERY IMPORTANT
   }),
 );
-// ⚠️ RAW BODY for Paystack webhook ONLY
-app.use((req, res, next) => {
-  if (req.originalUrl === "/payments/webhook") {
-    express.raw({ type: "*/*" })(req, res, next);
-  } else {
-    express.json()(req, res, next);
-  }
-});
+
+app.use("/payments/webhook", express.raw({ type: "application/json" }));
+app.use(express.json());
 
 app.use("/otp", require("./routes/otp"));
 app.use("/export", exportRoutes);

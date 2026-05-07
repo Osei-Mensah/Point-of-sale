@@ -325,21 +325,34 @@ router.post("/initialize", async (req, res) => {
     // 🔴 Convert to kobo (Paystack uses smallest currency unit)
     const amountInKobo = Math.round(amount * 100);
 
-    // 🔐 Call Paystack API
+    const { phone, provider } = req.body;
+
+    const isMobileMoney = phone && provider;
+
+    const payload = {
+      email,
+      amount: amountInKobo,
+      currency: "GHS",
+      reference: reference,
+      callback_url: process.env.FRONTEND_URL + "/sales",
+      metadata: {
+        cart,
+        customer_id,
+        points_used,
+      },
+    };
+
+    if (isMobileMoney) {
+      payload.channels = ["mobile_money"];
+      payload.mobile_money = {
+        phone,
+        provider,
+      };
+    }
+
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
-      {
-        email,
-        amount: amountInKobo,
-        currency: "GHS",
-        reference: reference,
-        callback_url: "http://localhost:5173/sales",
-        metadata: {
-          cart,
-          customer_id,
-          points_used,
-        },
-      },
+      payload,
       {
         headers: {
           Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,

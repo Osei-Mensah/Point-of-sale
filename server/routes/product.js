@@ -9,86 +9,126 @@ const db = require("../db");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
 
-router.delete("/:id", verifyToken, isAdmin, (req, res) => {
-  const { id } = req.params;
+router.delete("/:id", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  db.run("DELETE FROM products WHERE id = ?", [id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    await db.query("DELETE FROM products WHERE id = $1", [id]);
 
-    res.json({ message: "Product deleted" });
-  });
+    res.json({
+      message: "Product deleted",
+    });
+  } catch (error) {
+    console.error("DELETE PRODUCT ERROR:", error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 // GET all products
 router.get("/", verifyToken, isCashierOrAdmin, async (req, res) => {
-  db.all("SELECT * FROM products", [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query("SELECT * FROM products ORDER BY id ASC");
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("GET PRODUCTS ERROR:", error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
 // GET products by barcode (handle duplicates)
-router.get("/barcode/:barcode", verifyToken, isCashierOrAdmin, (req, res) => {
-  const { barcode } = req.params;
+router.get(
+  "/barcode/:barcode",
+  verifyToken,
+  isCashierOrAdmin,
+  async (req, res) => {
+    try {
+      const { barcode } = req.params;
 
-  db.all(
-    "SELECT * FROM products WHERE barcode = ?",
-    [barcode],
-    (err, products) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+      const result = await db.query(
+        "SELECT * FROM products WHERE barcode = $1",
+        [barcode],
+      );
+
+      const products = result.rows;
 
       if (!products || products.length === 0) {
-        return res.status(404).json({ error: "Product not found" });
+        return res.status(404).json({
+          error: "Product not found",
+        });
       }
 
       res.json(products);
-    },
-  );
-});
+    } catch (error) {
+      console.error("BARCODE PRODUCT ERROR:", error);
+
+      res.status(500).json({
+        error: error.message,
+      });
+    }
+  },
+);
 
 // ADD product
-router.post("/", verifyToken, isAdmin, (req, res) => {
-  const { name, category, price, quantity, barcode } = req.body;
+router.post("/", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { name, category, price, quantity, barcode } = req.body;
 
-  const sql = `
-    INSERT INTO products (name, category, price, quantity, barcode)
-    VALUES (?, ?, ?, ?, ?)
-  `;
-
-  db.run(sql, [name, category, price, quantity, barcode], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    const result = await db.query(
+      `
+      INSERT INTO products (name, category, price, quantity, barcode)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+      `,
+      [name, category, price, quantity, barcode],
+    );
 
     res.json({
-      id: this.lastID,
+      id: result.rows[0].id,
       message: "Product added successfully",
     });
-  });
+  } catch (error) {
+    console.error("ADD PRODUCT ERROR:", error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 // UPDATE product
-router.put("/:id", verifyToken, isAdmin, (req, res) => {
-  const { id } = req.params;
-  const { name, category, price, quantity, barcode } = req.body;
+router.put("/:id", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, price, quantity, barcode } = req.body;
 
-  const sql = `
-    UPDATE products
-    SET name = ?, category = ?, price = ?, quantity = ?, barcode = ?
-    WHERE id = ?
-  `;
+    await db.query(
+      `
+      UPDATE products
+      SET name = $1,
+          category = $2,
+          price = $3,
+          quantity = $4,
+          barcode = $5
+      WHERE id = $6
+      `,
+      [name, category, price, quantity, barcode, id],
+    );
 
-  db.run(sql, [name, category, price, quantity, barcode, id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    res.json({
+      message: "Product updated successfully",
+    });
+  } catch (error) {
+    console.error("UPDATE PRODUCT ERROR:", error);
 
-    res.json({ message: "Product updated successfully" });
-  });
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
 // BULK IMPORT PRODUCTS (CSV)
