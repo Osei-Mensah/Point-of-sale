@@ -8,6 +8,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("EMAIL CONFIG ERROR:", error);
+  } else {
+    console.log("✅ Email server ready");
+  }
+});
+
 const sendReceiptEmail = async ({
   email,
   customerName,
