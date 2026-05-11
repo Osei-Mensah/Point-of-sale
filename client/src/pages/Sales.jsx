@@ -4,6 +4,17 @@ import { apiFetch } from "../services/api";
 import { useNavigate } from "react-router-dom";
 
 import { useLocation } from "react-router-dom";
+import {
+  Banknote,
+  Boxes,
+  Cpu,
+  Flame,
+  Hammer,
+  LayoutGrid,
+  Smartphone,
+  Snowflake,
+  Wallet,
+} from "lucide-react";
 
 const getProvider = (phone) => {
   if (
@@ -302,9 +313,9 @@ function Sales() {
   };
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex h-full ">
       {/* LEFT: PRODUCTS */}
-      <div className="w-[70%] bg-white p-4 rounded shadow flex flex-col">
+      <div className="flex-1 p-4 rounded flex flex-col">
         <h1 className="text-2xl font-bold mb-4">POINT OF SALE </h1>
         <input
           type="text"
@@ -313,40 +324,75 @@ function Sales() {
           onChange={(e) => setSearch(e.target.value)}
           className="mb-4 p-2 border w-full rounded"
         />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto flex-1">
-          {" "}
-          {filteredProducts.map((product) => (
-            <div
-              key={product.id}
-              onClick={() => {
-                if (product.quantity > 0) addToCart(product);
-              }}
-              className={`p-4 rounded shadow transition flex flex-col justify-between cursor-pointer ${
-                product.quantity === 0
-                  ? "bg-gray-200 cursor-not-allowed"
-                  : product.quantity <= 5
-                    ? "bg-yellow-100 border border-yellow-400"
-                    : "bg-gray-50 hover:shadow-md"
-              }`}
-            >
-              <p className="font-semibold text-lg">{product.name}</p>
-              <p className="text-gray-600">GHS {product.price}</p>
-              <p className="text-sm text-gray-500">
-                Stock: {product.quantity}
-                {product.quantity > 0 && product.quantity <= 5 && (
-                  <span className="ml-2 text-yellow-600 font-semibold">
-                    (Low!)
-                  </span>
-                )}
-              </p>{" "}
-            </div>
-          ))}
-        </div>{" "}
+        <div className="overflow-auto scroll-hidden">
+          <div
+            className={`mb-4 flex gap-2 flex-wrap ${search.trim() !== "" && "hidden"}`}
+          >
+            {[
+              { icon: LayoutGrid, category: "All" },
+              { icon: Cpu, category: "Electricals & Electronics" },
+              { icon: Snowflake, category: "AC & Refrigeration" },
+              { icon: Flame, category: "LPG Products" },
+              { icon: Hammer, category: "Hardware" },
+              { icon: Boxes, category: "General" },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div className="flex flex-col aspect-square w-[5.6rem] p-3 rounded-lg shadow bg-white ">
+                  <Icon />
+                  <div className="mt-3">
+                    <p className="text-sm leading-3 font-semibold line-clamp-1">
+                      {item.category}
+                    </p>
+                    <p className="text-[0.69rem] font-normal text-wrap overflow-hidden text-blue-400">
+                      103 items
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+            {filteredProducts.map((product) => (
+              <div
+                key={product.id}
+                onClick={() => {
+                  if (product.quantity > 0) addToCart(product);
+                }}
+                className={`p-3 aspect-square rounded shadow transition flex flex-col justify-between cursor-pointer ${
+                  product.quantity === 0
+                    ? "bg-gray-200 cursor-not-allowed"
+                    : product.quantity <= 5
+                      ? "bg-yellow-100 border border-yellow-400"
+                      : "bg-gray-50 hover:shadow-md"
+                }`}
+              >
+                <div className="w-[100%] aspect-[16/12] rounded-lg bg-gray-100"></div>
+                <div className="">
+                  <p className="font-semibold text-base leading-4">
+                    {product.name}
+                  </p>
+                  <p className="text-gray-600 text-sm">
+                    GH¢{Number(product.price).toFixed(2)}
+                  </p>
+                  <p className="text-gray-500 text-xs font-medium">
+                    Stock: {product.quantity}
+                    {product.quantity > 0 && product.quantity <= 5 && (
+                      <span className="ml-2 text-yellow-600 font-semibold">
+                        (Low!)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* RIGHT: CART */}
-      <div className="w-[30%] bg-white p-4 rounded shadow flex flex-col">
-        <h2 className="text-2xl font-bold mb-4">Cart</h2>
+      <div className="w-[19rem] bg-white p-4 rounded shadow flex flex-col ">
+        <h2 className="text-xl font-bold mb-4">Cart</h2>
 
         <div className="flex-1 overflow-y-auto">
           {cart.length === 0 ? (
@@ -356,33 +402,46 @@ function Sales() {
               {cart.map((item) => (
                 <li
                   key={item.id}
-                  className="p-4 bg-white rounded shadow flex justify-between items-center"
+                  className="p-3 gap-2 bg-white rounded-lg border flex h-20 overflow-hidden items-center w-[100%]"
                 >
+                  <div className="bg-gray-100 rounded-xl aspect-square h-[100%]"></div>
                   {/* LEFT SIDE */}
-                  <div>
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-sm text-gray-600">
-                      GHS {item.price} x {item.quantity}
-                    </p>
-                  </div>
+                  <div className="flex flex-1 justify-between">
+                    <div className="flex flex-col">
+                      <p className="font-semibold text-sm line-clamp-2">
+                        {item.name}
+                      </p>
+                      <p className="text-xs font-semibold text-blue-500 pt-[0.1rem]">
+                        GH¢{Number(item.price).toFixed(2)}
+                        <span className="text-gray-500 ml-1">
+                          {item.quantity}x
+                        </span>
+                      </p>
+                    </div>
 
-                  {/* RIGHT SIDE */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => decreaseQty(item.id)}
-                      className="px-2 bg-red-500 text-white rounded"
-                    >
-                      -
-                    </button>
+                    {/* RIGHT SIDE */}
+                    <div className="flex flex-col self-end">
+                      {/* <div>
+                        <button
+                          onClick={() => decreaseQty(item.id)}
+                          className="px-2 bg-red-500 text-white rounded"
+                        >
+                          -
+                        </button>
 
-                    <span>{item.quantity}</span>
+                        <span>{item.quantity}</span>
 
-                    <button
-                      onClick={() => increaseQty(item.id)}
-                      className="px-2 bg-green-500 text-white rounded"
-                    >
-                      +
-                    </button>
+                        <button
+                          onClick={() => increaseQty(item.id)}
+                          className="px-2 bg-green-500 text-white rounded"
+                        >
+                          +
+                        </button>
+                      </div> */}
+                      <p className="text-xs font-semibold text-blue-500 pt-[0.1rem]">
+                        GH¢{Number(item.price).toFixed(2)}
+                      </p>
+                    </div>
                   </div>
                 </li>
               ))}
@@ -390,16 +449,46 @@ function Sales() {
           )}
         </div>
 
-        <div className="border-t pt-4 mt-4">
-          <h3 className="text-2xl font-bold">Total: GHS {total}</h3>
-          <p className="mt-2 text-lg">
-            Change
-            <span className={change < 0 ? "text-red-500" : "text-green-600"}>
-              GHS {change}
-            </span>
-          </p>
+        <div className="pt-4 mt-2">
+          <div className="bg-gray-100 rounded-xl p-4">
+            <p className="text-[0.82rem] font-medium text-gray-500 flex justify-between">
+              Sub Total: <span>GH¢{Number(total).toFixed(2)}</span>
+            </p>
+            {/* <p className="text-[0.82rem] font-medium text-gray-500 flex justify-between">
+              Discount: <span>GH¢{Number(total).toFixed(2)}</span>
+            </p> */}
+            <h3 className="text-sm font-bold flex justify-between border-t border-gray-300 pt-1 mt-2">
+              Total Amount: <span>GH¢{Number(total).toFixed(2)}</span>
+            </h3>
+          </div>
 
-          <select
+          <div className="flex justify-center gap-2 mt-3">
+            {[
+              { paymentMethod: "Cash", icon: Banknote },
+              { paymentMethod: "Mobile Money", icon: Smartphone },
+              { paymentMethod: "Card", icon: Wallet },
+            ].map((item) => {
+              let Icon = item.icon;
+              return (
+                <div
+                  key={item.paymentMethod}
+                  onClick={() => {
+                    setPaymentMethod(item.paymentMethod);
+                  }}
+                >
+                  <div
+                    className={`border border-blue-400 ${paymentMethod == item.paymentMethod && "bg-blue-100/70"} w-[4.8rem] aspect-[16/10] rounded-lg flex-1 flex justify-center items-center`}
+                  >
+                    <Icon color="#3b82f6" size={19} />
+                  </div>
+                  <p className="text-[0.7rem] font-semibold text-center overflow-hidden text-wrap">
+                    {item.paymentMethod}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {/* <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
             className="mt-4 p-2 border w-full rounded"
@@ -407,7 +496,7 @@ function Sales() {
             <option>Cash</option>
             <option>Mobile Money</option>
             <option>Card</option>
-          </select>
+          </select> */}
 
           {paymentMethod === "Mobile Money" && (
             <input
@@ -430,7 +519,7 @@ function Sales() {
           <button
             onClick={handleCheckout}
             disabled={loading}
-            className={`mt-4 px-4 py-2 rounded text-white w-full ${
+            className={`mt-4 px-4 py-2 rounded-lg text-white w-full ${
               loading ? "bg-gray-400" : "bg-blue-700"
             }`}
           >
@@ -492,12 +581,12 @@ function Sales() {
         )}
       </div>
 
-      <button
+      {/* <button
         onClick={() => window.open("http://localhost:5000/export/sales")}
         className="mt-4 bg-green-700 text-white px-4 py-2 rounded"
       >
         Export Sales (CSV)
-      </button>
+      </button> */}
     </div>
   );
 }
