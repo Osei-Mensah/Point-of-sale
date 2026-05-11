@@ -41,51 +41,17 @@ router.get("/", verifyToken, isCashierOrAdmin, async (req, res) => {
   }
 });
 
-// GET products by barcode (handle duplicates)
-router.get(
-  "/barcode/:barcode",
-  verifyToken,
-  isCashierOrAdmin,
-  async (req, res) => {
-    try {
-      const { barcode } = req.params;
-
-      const result = await db.query(
-        "SELECT * FROM products WHERE barcode = $1",
-        [barcode],
-      );
-
-      const products = result.rows;
-
-      if (!products || products.length === 0) {
-        return res.status(404).json({
-          error: "Product not found",
-        });
-      }
-
-      res.json(products);
-    } catch (error) {
-      console.error("BARCODE PRODUCT ERROR:", error);
-
-      res.status(500).json({
-        error: error.message,
-      });
-    }
-  },
-);
-
 // ADD product
 router.post("/", verifyToken, isAdmin, async (req, res) => {
   try {
-    const { name, category, price, quantity, barcode } = req.body;
-
+    const { name, category, price, quantity } = req.body;
     const result = await db.query(
       `
-      INSERT INTO products (name, category, price, quantity, barcode)
-      VALUES ($1, $2, $3, $4, $5)
+     INSERT INTO products (name, category, price, quantity)
+VALUES ($1, $2, $3, $4)
       RETURNING id
       `,
-      [name, category, price, quantity, barcode],
+      [name, category, price, quantity],
     );
 
     res.json({
@@ -104,7 +70,7 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
 router.put("/:id", verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, price, quantity, barcode } = req.body;
+    const { name, category, price, quantity } = req.body;
 
     await db.query(
       `
@@ -112,11 +78,10 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       SET name = $1,
           category = $2,
           price = $3,
-          quantity = $4,
-          barcode = $5
-      WHERE id = $6
+          quantity = $4
+      WHERE id = $5
       `,
-      [name, category, price, quantity, barcode, id],
+      [name, category, price, quantity, id],
     );
 
     res.json({
@@ -174,7 +139,6 @@ router.post(
           const category = row.category?.trim() || "";
           const price = Number(row.price);
           const quantity = Number(row.quantity) || 0;
-          const barcode = row.barcode?.trim() || "";
 
           // 🔴 VALIDATION
           if (!name || isNaN(price)) {
@@ -183,40 +147,35 @@ router.post(
             return insertNext(index + 1);
           }
 
-          // 🔴 CHECK DUPLICATE (barcode)
-          db.get(
-            "SELECT id FROM products WHERE barcode = ?",
-            [barcode],
-            (err, existing) => {
-              if (err) {
-                errors.push({ row, error: err.message });
-                skipped++;
-                return insertNext(index + 1);
-              }
-
-              if (existing) {
-                skipped++;
-                return insertNext(index + 1);
-              }
-
-              // ✅ INSERT
-              db.run(
-                `INSERT INTO products (name, category, price, quantity, barcode)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [name, category, price, quantity, barcode],
-                (err) => {
-                  if (err) {
-                    errors.push({ row, error: err.message });
-                    skipped++;
-                  } else {
-                    inserted++;
-                  }
-
-                  insertNext(index + 1);
-                },
+          (async () => {
+            try {
+              // Insert product
+              await db.query(
+                `
+      INSERT INTO products (
+        name,
+        category,
+        price,
+        quantity
+        
+      )
+      VALUES ($1, $2, $3, $4)
+      `,
+                [name, category, price, quantity],
               );
-            },
-          );
+
+              inserted++;
+              insertNext(index + 1);
+            } catch (err) {
+              errors.push({
+                row,
+                error: err.message,
+              });
+
+              skipped++;
+              insertNext(index + 1);
+            }
+          })();
         };
 
         insertNext(0);

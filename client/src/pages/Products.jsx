@@ -9,7 +9,6 @@ function Products() {
     category: "",
     price: "",
     quantity: "",
-    barcode: "",
   });
   const [editingId, setEditingId] = useState(null);
   const [file, setFile] = useState(null);
@@ -51,7 +50,6 @@ function Products() {
           category: "",
           price: "",
           quantity: "",
-          barcode: "",
         });
 
         setEditingId(null);
@@ -202,15 +200,6 @@ function Products() {
           className="border p-2 w-full"
         />
 
-        <input
-          type="text"
-          name="barcode"
-          value={form.barcode}
-          placeholder="Barcode"
-          onChange={handleChange}
-          className="border p-2 w-full"
-        />
-
         <button
           type="submit"
           className={`px-4 py-2 rounded text-white ${
@@ -228,7 +217,6 @@ function Products() {
                 category: "",
                 price: "",
                 quantity: "",
-                barcode: "",
               });
               setEditingId(null);
             }}
@@ -334,7 +322,6 @@ function Products() {
                       category: product.category || "",
                       price: product.price,
                       quantity: product.quantity,
-                      barcode: product.barcode || "",
                     });
                     setEditingId(product.id);
                   }}

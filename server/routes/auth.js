@@ -9,53 +9,62 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // 1. Basic validation
+    // Validation
     if (!name || !email || !password) {
-      return res.status(400).json({ error: "All fields are required" });
+      return res.status(400).json({
+        error: "All fields are required",
+      });
     }
 
     if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ error: "Password must be at least 6 characters" });
+      return res.status(400).json({
+        error: "Password must be at least 6 characters",
+      });
     }
 
-    // 2. Check if user already exists
-    db.get(
-      "SELECT * FROM users WHERE email = ?",
+    // Check existing user
+    const existingResult = await db.query(
+      "SELECT * FROM users WHERE email = $1",
       [email],
-      async (err, user) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-
-        if (user) {
-          return res.status(400).json({ error: "User already exists" });
-        }
-
-        // 3. Hash password
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-        // 4. Insert user
-        db.run(
-          `INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)`,
-          [name, email, hashedPassword, role || "cashier"],
-          function (err) {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-
-            return res.status(201).json({
-              message: "User registered successfully",
-              userId: this.lastID,
-            });
-          },
-        );
-      },
     );
+
+    const existingUser = existingResult.rows[0];
+
+    if (existingUser) {
+      return res.status(400).json({
+        error: "User already exists",
+      });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Insert user
+    const insertResult = await db.query(
+      `
+      INSERT INTO users (
+        name,
+        email,
+        password,
+        role
+      )
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+      `,
+      [name, email, hashedPassword, role || "cashier"],
+    );
+
+    return res.status(201).json({
+      message: "User registered successfully",
+      userId: insertResult.rows[0].id,
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("REGISTER ERROR:", error);
+
+    return res.status(500).json({
+      error: error.message,
+    });
   }
 });
 

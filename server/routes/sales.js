@@ -11,8 +11,7 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
   const client = await db.connect();
 
   try {
-    const { cart, total, paymentMethod, amountPaid, customer_id, points_used } =
-      req.body;
+    const { cart, total, paymentMethod, amountPaid } = req.body;
 
     const userId = req.user.id;
 
@@ -23,36 +22,7 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
     }
 
     // POINTS LOGIC
-    let discount = 0;
-    let finalTotal = total;
-
-    if (customer_id !== null && customer_id !== undefined && points_used > 0) {
-      const customerResult = await client.query(
-        "SELECT points FROM customers WHERE id = $1",
-        [customer_id],
-      );
-
-      const customer = customerResult.rows[0];
-
-      if (!customer) {
-        return res.status(400).json({
-          error: "Customer not found",
-        });
-      }
-
-      if (points_used > customer.points) {
-        return res.status(400).json({
-          error: "Not enough points",
-        });
-      }
-
-      discount = Math.floor(points_used / 10);
-      finalTotal = total - discount;
-
-      if (finalTotal < 0) {
-        finalTotal = 0;
-      }
-    }
+    const finalTotal = total;
 
     const change = amountPaid - finalTotal;
 
@@ -68,20 +38,12 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
         user_id,
         amount_paid,
         change,
-        created_at,
-        customer_id
+        created_at
       )
-      VALUES ($1, $2, $3, $4, $5, NOW(), $6)
-      RETURNING id
+VALUES ($1, $2, $3, $4, $5, NOW())
+RETURNING id
       `,
-      [
-        finalTotal,
-        paymentMethod,
-        userId,
-        amountPaid,
-        change,
-        customer_id || null,
-      ],
+      [finalTotal, paymentMethod, userId, amountPaid, change],
     );
 
     const saleId = saleResult.rows[0].id;
@@ -129,59 +91,11 @@ router.post("/", verifyToken, isCashierOrAdmin, async (req, res) => {
       );
     }
 
-    // CUSTOMER POINTS
-    if (customer_id !== null && customer_id !== undefined) {
-      // ADD EARNED POINTS
-      await client.query(
-        `
-        UPDATE customers
-        SET points = points + $1
-        WHERE id = $2
-        `,
-        [Math.floor(finalTotal), customer_id],
-      );
-
-      // REMOVE USED POINTS
-      if (points_used > 0) {
-        await client.query(
-          `
-          UPDATE customers
-          SET points = points - $1
-          WHERE id = $2
-          `,
-          [points_used, customer_id],
-        );
-      }
-
-      // SEND RECEIPT EMAIL
-      const customerResult = await client.query(
-        `
-        SELECT email, name
-        FROM customers
-        WHERE id = $1
-        `,
-        [customer_id],
-      );
-
-      const customer = customerResult.rows[0];
-
-      if (customer?.email) {
-        sendReceiptEmail({
-          email: customer.email,
-          customerName: customer.name || "Customer",
-          total: finalTotal,
-          pointsUsed: points_used || 0,
-          pointsEarned: Math.floor(finalTotal),
-        }).catch(console.error);
-      }
-    }
-
     // TEST EMAIL
     sendReceiptEmail({
       email: "kwesidarkomichael@gmail.com",
       customerName: "Test User",
       total: finalTotal,
-      pointsUsed: points_used || 0,
       pointsEarned: Math.floor(finalTotal),
     }).catch(console.error);
 
