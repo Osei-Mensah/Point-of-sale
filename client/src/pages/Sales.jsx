@@ -17,19 +17,18 @@ const getProvider = (phone) => {
 
   if (phone.startsWith("027") || phone.startsWith("057")) return "tigo";
 
-  return "mtn"; // fallback
+  return "mtn";
 };
 
 const formatPhone = (phone) => {
   if (phone.startsWith("0")) {
     return "233" + phone.slice(1);
   }
+
   return phone;
 };
+
 function Sales() {
-  const [audioCtx] = useState(
-    () => new (window.AudioContext || window.webkitAudioContext)(),
-  );
   const [lastSale, setLastSale] = useState(null);
   const [verifiedRef, setVerifiedRef] = useState(null);
   const [cart, setCart] = useState([]);
@@ -38,22 +37,10 @@ function Sales() {
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [amountPaid, setAmountPaid] = useState("");
-  const [barcodeInput, setBarcodeInput] = useState("");
-  const [duplicateProducts, setDuplicateProducts] = useState([]);
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [customers, setCustomers] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [pointsToUse, setPointsToUse] = useState("");
-  const [showAddCustomer, setShowAddCustomer] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({
-    name: "",
-    phone: "",
-    email: "",
-  });
+  const [momoNumber, setMomoNumber] = useState("");
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discount = Math.floor(pointsToUse / 10);
-  const finalTotal = total - discount;
+  const finalTotal = total;
 
   const change = amountPaid ? amountPaid - finalTotal : 0;
   const navigate = useNavigate();
@@ -111,9 +98,6 @@ function Sales() {
         });
 
         setCart([]);
-        setSelectedCustomer(null);
-        setCustomerSearch("");
-        setPointsToUse("");
 
         return apiFetch("/products");
       })
@@ -155,75 +139,7 @@ function Sales() {
         setLoading(false);
       });
   }, [location.search, verifiedRef]);
-  const handleBarcodeScan = async (barcode) => {
-    try {
-      const products = await apiFetch(`/products/barcode/${barcode}`);
 
-      if (!products || products.error) {
-        alert("Product not found!");
-        return;
-      }
-
-      // 🔴 MULTIPLE PRODUCTS
-      if (products.length > 1) {
-        setDuplicateProducts(products);
-        return;
-      }
-
-      const product = products[0];
-
-      if (product.quantity <= 0) {
-        alert("Product out of stock!");
-        return;
-      }
-
-      // 🔊 Beep
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-
-      oscillator.start();
-      setTimeout(() => oscillator.stop(), 100);
-
-      addToCart(product);
-    } catch (err) {
-      console.error("Barcode scan failed:", err);
-      alert("Error scanning product");
-    }
-  };
-  useEffect(() => {
-    let buffer = "";
-
-    const handleKeyDown = (e) => {
-      // Ignore if user is typing in an input
-      const tag = e.target.tagName.toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
-
-      if (e.key === "Enter") {
-        if (buffer.length > 0) {
-          handleBarcodeScan(buffer);
-          buffer = "";
-        }
-        return;
-      }
-
-      // Accept letters and numbers
-      if (e.key.length === 1) {
-        buffer += e.key;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
   const increaseQty = (id) => {
     const product = products.find((p) => p.id === id);
 
@@ -240,21 +156,6 @@ function Sales() {
       }),
     );
   };
-
-  useEffect(() => {
-    if (!customerSearch) {
-      setCustomers([]);
-      return;
-    }
-
-    const delayDebounce = setTimeout(() => {
-      apiFetch(`/customers?search=${customerSearch}`)
-        .then((data) => setCustomers(data))
-        .catch((err) => console.error(err));
-    }, 300);
-
-    return () => clearTimeout(delayDebounce);
-  }, [customerSearch]);
 
   const decreaseQty = (id) => {
     setCart(
@@ -304,8 +205,7 @@ function Sales() {
       return;
     }
 
-    const discount = Math.floor(pointsToUse / 10);
-    const finalTotal = total - discount;
+    const finalTotal = total;
 
     // ✅ CASH FLOW
     if (paymentMethod === "Cash") {
@@ -323,8 +223,6 @@ function Sales() {
           total,
           paymentMethod: "cash",
           amountPaid: Number(amountPaid),
-          customer_id: selectedCustomer?.id || null,
-          points_used: Number(pointsToUse) || 0,
         }),
       })
         .then((res) => apiFetch(`/sales/${res.saleId}`))
@@ -340,9 +238,6 @@ function Sales() {
           });
 
           setCart([]);
-          setSelectedCustomer(null);
-          setCustomerSearch("");
-          setPointsToUse("");
         })
         .finally(() => setLoading(false));
 
@@ -355,29 +250,17 @@ function Sales() {
     }
 
     if (paymentMethod === "Mobile Money") {
-      if (!selectedCustomer) {
-        alert("Select a customer");
-        return;
-      }
-
-      if (!selectedCustomer.phone) {
-        alert("Customer must have a phone number");
-        return;
-      }
-
       setLoading(true);
 
       try {
         const res = await apiFetch("/payments/initialize", {
           method: "POST",
           body: JSON.stringify({
-            email: selectedCustomer.email || user.email,
+            email: user.email,
             amount: finalTotal,
             cart,
-            customer_id: selectedCustomer.id,
-            points_used: Number(pointsToUse) || 0,
-            phone: formatPhone(selectedCustomer.phone),
-            provider: getProvider(selectedCustomer.phone),
+            phone: formatPhone(momoNumber),
+            provider: getProvider(momoNumber),
           }),
         });
 
@@ -398,8 +281,6 @@ function Sales() {
         email: user.email,
         amount: finalTotal,
         cart,
-        customer_id: selectedCustomer?.id || null,
-        points_used: Number(pointsToUse) || 0,
       }),
     })
       .then((res) => {
@@ -420,26 +301,6 @@ function Sales() {
       });
   };
 
-  const handleCreateCustomer = async () => {
-    try {
-      const data = await apiFetch("/customers", {
-        method: "POST",
-        body: JSON.stringify(newCustomer),
-      });
-
-      // ✅ Auto-select new customer
-      setSelectedCustomer(data.customer || newCustomer);
-      setCustomerSearch(newCustomer.name);
-
-      // Reset form
-      setShowAddCustomer(false);
-      setNewCustomer({ name: "", phone: "", email: "" });
-      setCustomers([]);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create customer");
-    }
-  };
   return (
     <div className="flex h-full gap-6">
       {/* LEFT: PRODUCTS */}
@@ -451,19 +312,6 @@ function Sales() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="mb-4 p-2 border w-full rounded"
-        />
-        <input
-          type="text"
-          placeholder="Scan or type barcode..."
-          value={barcodeInput}
-          onChange={(e) => setBarcodeInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && barcodeInput.trim() !== "") {
-              handleBarcodeScan(barcodeInput.trim());
-              setBarcodeInput("");
-            }
-          }}
-          className="mb-4 p-2 border w-full rounded bg-yellow-50"
         />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto flex-1">
           {" "}
@@ -542,119 +390,6 @@ function Sales() {
           )}
         </div>
 
-        <div className="mb-4">
-          <label className="block font-semibold">Customer</label>
-
-          <input
-            type="text"
-            placeholder="Search by name, phone, email..."
-            value={customerSearch}
-            onChange={(e) => setCustomerSearch(e.target.value)}
-            className="border p-2 w-full"
-          />
-
-          {customers.length > 0 && (
-            <div className="border bg-white max-h-40 overflow-y-auto">
-              {customers.map((c) => (
-                <div
-                  key={c.id}
-                  className="p-2 hover:bg-gray-100 cursor-pointer"
-                  onClick={() => {
-                    setSelectedCustomer(c);
-                    setCustomerSearch(c.name);
-                    setCustomers([]);
-                  }}
-                >
-                  {c.name} — {c.phone}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {customerSearch && customers.length === 0 && (
-            <div className="border p-2 bg-yellow-50">
-              <p className="text-sm mb-2">No customer found</p>
-              <button
-                className="bg-blue-500 text-white px-2 py-1"
-                onClick={() => setShowAddCustomer(true)}
-              >
-                Add New Customer
-              </button>
-            </div>
-          )}
-
-          {showAddCustomer && (
-            <div className="border p-3 mt-2 bg-gray-50">
-              <h4 className="font-semibold mb-2">New Customer</h4>
-
-              <input
-                type="text"
-                placeholder="Name"
-                className="border p-1 w-full mb-2"
-                value={newCustomer.name}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, name: e.target.value })
-                }
-              />
-
-              <input
-                type="text"
-                placeholder="Phone"
-                className="border p-1 w-full mb-2"
-                value={newCustomer.phone}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, phone: e.target.value })
-                }
-              />
-
-              <input
-                type="email"
-                placeholder="Email"
-                className="border p-1 w-full mb-2"
-                value={newCustomer.email}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, email: e.target.value })
-                }
-              />
-
-              <button
-                className="bg-green-500 text-white px-3 py-1"
-                onClick={handleCreateCustomer}
-              >
-                Save Customer
-              </button>
-            </div>
-          )}
-          {selectedCustomer && (
-            <div className="mt-2 text-sm text-green-600">
-              Selected: {selectedCustomer.name}
-              <br />
-              Points: {selectedCustomer.points || 0}
-            </div>
-          )}
-        </div>
-        {selectedCustomer && (
-          <div className="mb-4">
-            <label className="block font-semibold">Use Points</label>
-            <input
-              type="number"
-              placeholder="Enter points to redeem"
-              value={pointsToUse}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-
-                if (selectedCustomer && value > selectedCustomer.points) {
-                  alert("Cannot use more points than available");
-                  return;
-                }
-
-                setPointsToUse(value);
-              }}
-              className="border p-2 w-full"
-            />
-          </div>
-        )}
-
         <div className="border-t pt-4 mt-4">
           <h3 className="text-2xl font-bold">Total: GHS {total}</h3>
           <p className="mt-2 text-lg">
@@ -674,6 +409,16 @@ function Sales() {
             <option>Card</option>
           </select>
 
+          {paymentMethod === "Mobile Money" && (
+            <input
+              type="text"
+              placeholder="Enter MoMo number"
+              value={momoNumber}
+              onChange={(e) => setMomoNumber(e.target.value)}
+              className="mt-2 p-2 border w-full rounded"
+            />
+          )}
+
           <input
             type="number"
             placeholder="Amount Paid"
@@ -682,12 +427,6 @@ function Sales() {
             className="mt-2 p-2 border w-full rounded"
           />
 
-          {selectedCustomer && pointsToUse > 0 && (
-            <div className="text-sm text-blue-600 mt-2">
-              Discount: GHS {Math.floor(pointsToUse / 10)} <br />
-              Final Total: GHS {total - Math.floor(pointsToUse / 10)}
-            </div>
-          )}
           <button
             onClick={handleCheckout}
             disabled={loading}
@@ -759,36 +498,6 @@ function Sales() {
       >
         Export Sales (CSV)
       </button>
-
-      {duplicateProducts.length > 0 && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow w-[400px]">
-            <h2 className="text-xl font-bold mb-4">Multiple products found</h2>
-
-            <ul className="space-y-2">
-              {duplicateProducts.map((p) => (
-                <li
-                  key={p.id}
-                  onClick={() => {
-                    addToCart(p);
-                    setDuplicateProducts([]);
-                  }}
-                  className="p-3 border rounded cursor-pointer hover:bg-gray-100"
-                >
-                  {p.name} — GHS {p.price}
-                </li>
-              ))}
-            </ul>
-
-            <button
-              onClick={() => setDuplicateProducts([])}
-              className="mt-4 bg-red-500 text-white px-4 py-2 rounded w-full"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

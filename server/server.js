@@ -4,15 +4,11 @@ process.on("uncaughtException", (err) => {
 
 require("dotenv").config();
 require("./db");
-// require("./initDB");
-// require("./migrations/add_customers_table");
-// require("./migrations/add_customer_id_to_sales");
 
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const { verifyToken, isAdmin } = require("./middleware/authMiddleware");
-const customerRoutes = require("./routes/customers");
 
 const productRoutes = require("./routes/product");
 const app = express();
@@ -32,7 +28,6 @@ app.use(
 app.use("/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
-app.use("/otp", require("./routes/otp"));
 app.use("/export", exportRoutes);
 app.use(cookieParser());
 app.use("/auth", authRoutes);
@@ -50,7 +45,6 @@ app.get("/admin-only", verifyToken, isAdmin, (req, res) => {
 app.use("/products", productRoutes);
 app.use("/sales", salesRoutes);
 app.use("/payments", paymentRoutes);
-app.use("/customers", customerRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

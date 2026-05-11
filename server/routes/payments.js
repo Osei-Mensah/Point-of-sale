@@ -18,8 +18,7 @@ function handleSuccessfulPayment(paymentData, reference, userId, res) {
     }
 
     const metadata = paymentData.metadata;
-    const points_used = metadata?.points_used || 0;
-    const customer_id = metadata?.customer_id || null;
+
     const cart = metadata?.cart;
 
     if (!cart || cart.length === 0) {
@@ -31,289 +30,155 @@ function handleSuccessfulPayment(paymentData, reference, userId, res) {
     // 🔐 STEP 10 — Recalculate total from DB (ANTI-FRAUD)
     let calculatedTotal = 0;
 
-    function validateCartAndCalculateTotal(callback) {
-      let i = 0;
+    async function validateCartAndCalculateTotal() {
+      calculatedTotal = 0;
 
-      function next() {
-        if (i >= cart.length) {
-          return callback();
+      for (const item of cart) {
+        const result = await db.query(
+          "SELECT price FROM products WHERE id = $1",
+          [item.id],
+        );
+
+        const row = result.rows[0];
+
+        if (!row) {
+          throw new Error(`Product not found (ID: ${item.id})`);
         }
 
-        const item = cart[i];
-
-        db.get(
-          `SELECT price FROM products WHERE id = ?`,
-          [item.id],
-          (err, row) => {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-
-            if (!row) {
-              return res.status(400).json({
-                error: `Product not found (ID: ${item.id})`,
-              });
-            }
-
-            calculatedTotal += row.price * item.quantity;
-
-            i++;
-            next();
-          },
-        );
+        calculatedTotal += Number(row.price) * item.quantity;
       }
-
-      next();
     }
 
     const paymentMethod = "paystack";
 
-    validateCartAndCalculateTotal(() => {
-      // 🎯 APPLY POINTS DISCOUNT
-      let discount = 0;
-      let finalTotal = calculatedTotal;
+    (async () => {
+      try {
+        await validateCartAndCalculateTotal(); // 🎯 APPLY POINTS DISCOUNT
+        const finalTotal = calculatedTotal;
 
-      if (
-        customer_id !== null &&
-        customer_id !== undefined &&
-        points_used > 0
-      ) {
-        discount = Math.floor(points_used / 10);
-        finalTotal = calculatedTotal - discount;
+        // 🔐 FIRST — fraud check (MOVED HERE)
+        if (
+          Number(calculatedTotal.toFixed(2)) !== Number(amountPaid.toFixed(2))
+        ) {
+          return res.status(400).json({
+            error: "Payment amount mismatch. Possible tampering detected.",
+          });
+        }
 
-        if (finalTotal < 0) finalTotal = 0;
-      }
-
-      // 🔐 FIRST — fraud check (MOVED HERE)
-      if (
-        Number(calculatedTotal.toFixed(2)) !== Number(amountPaid.toFixed(2))
-      ) {
-        return res.status(400).json({
-          error: "Payment amount mismatch. Possible tampering detected.",
-        });
-      }
-
-      // 🎯 THEN points validation
-      if (
-        customer_id !== null &&
-        customer_id !== undefined &&
-        points_used > 0
-      ) {
-        db.get(
-          `SELECT points FROM customers WHERE id = ?`,
-          [customer_id],
-          (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            if (!row) {
-              return res.status(400).json({ error: "Customer not found" });
-            }
-
-            if (points_used > row.points) {
-              return res.status(400).json({ error: "Not enough points" });
-            }
-
-            proceedWithPayment();
-          },
-        );
-      } else {
         proceedWithPayment();
-      }
 
-      function proceedWithPayment() {
-        db.serialize(() => {
-          db.run("BEGIN TRANSACTION");
+        async function proceedWithPayment() {
+          const client = await db.connect();
 
-          db.run(
-            `INSERT OR IGNORE INTO sales (
-  total_amount, payment_method, user_id, amount_paid, change, created_at, reference, customer_id
-)
-VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)`,
-            [
-              finalTotal,
-              paymentMethod,
-              userId,
-              amountPaid,
-              amountPaid - finalTotal, // ✅ FIXED
+          try {
+            await client.query("BEGIN");
+
+            // Prevent duplicate processing
+            const existingSaleResult = await client.query(
+              "SELECT id FROM sales WHERE reference = $1",
+              [reference],
+            );
+
+            if (existingSaleResult.rows.length > 0) {
+              await client.query("ROLLBACK");
+
+              return res.json({
+                message: "Already processed",
+                saleId: existingSaleResult.rows[0].id,
+                reference,
+              });
+            }
+
+            // Create sale
+            const saleResult = await client.query(
+              `
+      INSERT INTO sales (
+        total_amount,
+        payment_method,
+        user_id,
+        amount_paid,
+        change,
+        created_at,
+        reference
+      )
+      VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+      RETURNING id
+      `,
+              [
+                finalTotal,
+                paymentMethod,
+                userId,
+                amountPaid,
+                amountPaid - finalTotal,
+                reference,
+              ],
+            );
+
+            const saleId = saleResult.rows[0].id;
+
+            // Process cart items
+            for (const item of cart) {
+              // Reduce stock safely
+              const updateResult = await client.query(
+                `
+        UPDATE products
+        SET quantity = quantity - $1
+        WHERE id = $2
+          AND quantity >= $1
+        RETURNING id
+        `,
+                [item.quantity, item.id],
+              );
+
+              if (updateResult.rows.length === 0) {
+                throw new Error(`Insufficient stock for product ID ${item.id}`);
+              }
+
+              // Insert sale item
+              await client.query(
+                `
+        INSERT INTO sales_items (
+          sale_id,
+          product_id,
+          quantity,
+          price
+        )
+        VALUES ($1, $2, $3, $4)
+        `,
+                [saleId, item.id, item.quantity, item.price],
+              );
+            }
+
+            await client.query("COMMIT");
+
+            return res.json({
+              message: "Payment verified and sale recorded",
+              saleId,
               reference,
-              customer_id,
-            ],
-            function (err) {
-              if (err) {
-                db.run("ROLLBACK");
-                return res.status(500).json({ error: err.message });
-              }
+            });
+          } catch (error) {
+            await client.query("ROLLBACK");
 
-              if (this.changes === 0) {
-                return db.get(
-                  `SELECT id FROM sales WHERE reference = ?`,
-                  [reference],
-                  (err, row) => {
-                    if (err) {
-                      return res.status(500).json({ error: err.message });
-                    }
-
-                    return res.json({
-                      message: "Already processed",
-                      saleId: row.id,
-                      reference,
-                    });
-                  },
-                );
-              }
-
-              const saleId = this.lastID;
-              const stmt = db.prepare(`
-        INSERT INTO sales_items (sale_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)
-      `);
-
-              let index = 0;
-
-              function processNextItem() {
-                if (index >= cart.length) {
-                  stmt.finalize();
-
-                  db.run("COMMIT", (err) => {
-                    if (err) {
-                      if (err.message.includes("no transaction is active")) {
-                        console.warn(
-                          "⚠️ Commit skipped (no active transaction)",
-                        );
-
-                        // 📧 Send receipt email (use CUSTOMER from DB)
-                        if (customer_id !== null && customer_id !== undefined) {
-                          db.get(
-                            `SELECT email, name FROM customers WHERE id = ?`,
-                            [customer_id],
-                            (err, customer) => {
-                              if (!err && customer?.email) {
-                                const {
-                                  sendReceiptEmail,
-                                } = require("../services/emailService");
-
-                                sendReceiptEmail({
-                                  email: customer.email,
-                                  customerName: customer.name || "Customer",
-                                  total: finalTotal,
-                                  pointsUsed: points_used,
-                                  pointsEarned: Math.floor(finalTotal),
-                                  items: cart,
-                                }).catch(console.error);
-                              }
-                            },
-                          );
-                        }
-                        return res.json({
-                          message: "Payment verified (already committed)",
-                          saleId,
-                          reference,
-                        });
-                      }
-
-                      db.run("ROLLBACK");
-                      return res.status(500).json({ error: err.message });
-                    }
-
-                    const {
-                      sendReceiptEmail,
-                    } = require("../services/emailService");
-
-                    // 📧 Send receipt email (MAIN SUCCESS PATH)
-                    if (customer_id !== null && customer_id !== undefined) {
-                      db.get(
-                        `SELECT email, name FROM customers WHERE id = ?`,
-                        [customer_id],
-                        (err, customer) => {
-                          if (!err && customer?.email) {
-                            sendReceiptEmail({
-                              email: customer.email,
-                              customerName: customer.name || "Customer",
-                              total: finalTotal,
-                              pointsUsed: points_used,
-                              pointsEarned: Math.floor(finalTotal),
-                              items: cart,
-                            }).catch(console.error);
-                          }
-                        },
-                      );
-                    }
-
-                    return res.json({
-                      message: "Payment verified and sale recorded",
-                      saleId,
-                      reference,
-                    });
-                  });
-
-                  if (customer_id !== null && customer_id !== undefined) {
-                    db.run(
-                      `UPDATE customers SET points = points + ? WHERE id = ?`,
-                      [Math.floor(finalTotal), customer_id],
-                    );
-
-                    if (points_used > 0) {
-                      db.run(
-                        `UPDATE customers SET points = points - ? WHERE id = ? AND points >= ?`,
-                        [points_used, customer_id, points_used],
-                      );
-                    }
-                  }
-                  return;
-                }
-
-                const item = cart[index];
-
-                db.run(
-                  `UPDATE products 
-           SET quantity = quantity - ? 
-           WHERE id = ? AND quantity >= ?`,
-                  [item.quantity, item.id, item.quantity],
-                  function (err) {
-                    if (err) {
-                      db.run("ROLLBACK");
-                      return res.status(500).json({ error: err.message });
-                    }
-
-                    if (this.changes === 0) {
-                      db.run("ROLLBACK");
-                      return res.status(400).json({
-                        error: `Insufficient stock for product ID ${item.id}`,
-                      });
-                    }
-
-                    stmt.run(
-                      saleId,
-                      item.id,
-                      item.quantity,
-                      item.price,
-                      (err) => {
-                        if (err) {
-                          db.run("ROLLBACK");
-                          return res.status(500).json({ error: err.message });
-                        }
-
-                        index++;
-                        processNextItem();
-                      },
-                    );
-                  },
-                );
-              }
-
-              processNextItem();
-            },
-          );
+            return res.status(500).json({
+              error: error.message,
+            });
+          } finally {
+            client.release();
+          }
+        }
+      } catch (error) {
+        return res.status(500).json({
+          error: error.message,
         });
       }
-    });
+    })();
   }
   processPayment();
 }
 
 router.post("/initialize", async (req, res) => {
   try {
-    const { email, amount, cart, customer_id, points_used } = req.body;
+    const { email, amount, cart } = req.body;
     if (!email || amount === undefined || !cart) {
       return res.status(400).json({
         error: "Email, amount, and cart are required",
@@ -337,8 +202,6 @@ router.post("/initialize", async (req, res) => {
       callback_url: process.env.FRONTEND_URL + "/sales",
       metadata: {
         cart,
-        customer_id,
-        points_used,
       },
     };
 
