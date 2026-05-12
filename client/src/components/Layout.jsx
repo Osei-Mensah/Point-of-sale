@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { ShoppingCart, Package, History, BarChart3 } from "lucide-react";
+import { ShoppingCart, Package, History, BarChart3, User2 } from "lucide-react";
 
 const navItems = [
   {
@@ -43,7 +43,7 @@ function Layout({ children, title }) {
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
-      <div className="w-52 bg-gray-900 text-white flex flex-col">
+      <div className="w-52 bg-gray-900 text-white flex flex-col justify-between">
         <div className="p-4">
           <h1 className="text-xl font-bold mb-6">POS System</h1>
 
@@ -73,9 +73,20 @@ function Layout({ children, title }) {
         </div>
         {/* LOGOUT */}
         <div className="p-4 border-t border-gray-700">
+          <div className="flex items-center gap-2">
+            <User2
+              className="bg-gray-50 rounded-full p-[0.18rem]"
+              size={28}
+              color="#111827"
+            />
+            <div>
+              <h3 className="text-sm font-semibold leading-3">{user.email}</h3>
+              <p className="text-xs font-light">{user.role}</p>
+            </div>
+          </div>
           <button
             onClick={handleLogout}
-            className="w-full bg-red-500 hover:bg-red-600 p-2 rounded"
+            className="w-full mt-5 bg-red-500 hover:bg-red-600 p-2 rounded"
           >
             Logout
           </button>

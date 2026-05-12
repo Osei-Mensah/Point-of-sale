@@ -338,7 +338,7 @@ function Sales() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <div className="flex flex-col aspect-square w-[5.6rem] p-3 rounded-lg shadow bg-white ">
+                <div className="flex flex-col aspect-square w-[5.6rem] p-3 rounded-lg shadow bg-white cursor-pointer hover:shadow-md">
                   <Icon />
                   <div className="mt-3">
                     <p className="text-sm leading-3 font-semibold line-clamp-1">
@@ -352,7 +352,7 @@ function Sales() {
               );
             })}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
             {filteredProducts.map((product) => (
               <div
                 key={product.id}
