@@ -14,6 +14,8 @@ function Products() {
   const [file, setFile] = useState(null);
   const [previewData, setPreviewData] = useState([]);
   const [validationErrors, setValidationErrors] = useState([]);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
 
   const handleChange = (e) => {
     setForm({
@@ -22,14 +24,25 @@ function Products() {
     });
   };
 
-  const deleteProduct = (id) => {
-    apiFetch(`/products/${id}`, {
-      method: "DELETE",
-    })
-      .then(() => {
-        setProducts(products.filter((p) => p.id !== id));
-      })
-      .catch((err) => console.error(err));
+  const deleteProduct = async (id) => {
+    try {
+      const res = await apiFetch(`/products/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+
+      setProducts(products.filter((p) => p.id !== id));
+
+      alert("Product deleted successfully");
+    } catch (err) {
+      console.error(err);
+
+      alert(err?.error || "Failed to delete product");
+    }
   };
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -173,14 +186,59 @@ function Products() {
           required
         />
 
-        <input
-          type="text"
+        <select
           name="category"
           value={form.category}
-          placeholder="Category"
-          onChange={handleChange}
+          onChange={(e) => {
+            if (e.target.value === "__new__") {
+              setShowNewCategoryInput(true);
+
+              setForm({
+                ...form,
+                category: "",
+              });
+
+              return;
+            }
+
+            setShowNewCategoryInput(false);
+            handleChange(e);
+          }}
           className="border p-2 w-full"
-        />
+        >
+          <option value="">Select Category</option>
+          <option value="__new__">+ Add New Category</option>
+
+          {[
+            ...new Set(
+              products
+                .map((product) => product.category?.trim().toLowerCase())
+                .filter(Boolean),
+            ),
+          ].map((category) => (
+            <option key={category} value={category}>
+              {category.charAt(0).toUpperCase() + category.slice(1)}
+            </option>
+          ))}
+        </select>
+        {showNewCategoryInput && (
+          <input
+            type="text"
+            placeholder="Enter new category"
+            value={newCategory}
+            onChange={(e) => {
+              const value = e.target.value;
+
+              setNewCategory(value);
+
+              setForm({
+                ...form,
+                category: value.trim(),
+              });
+            }}
+            className="border p-2 w-full"
+          />
+        )}
 
         <input
           type="number"
