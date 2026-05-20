@@ -49,7 +49,6 @@ function Sales() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [amountPaid, setAmountPaid] = useState("");
-  const [momoNumber, setMomoNumber] = useState("");
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const finalTotal = total;
@@ -168,6 +167,21 @@ function Sales() {
       }),
     );
   };
+  const updateQty = (id, quantity) => {
+    if (quantity < 1) return;
+
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+
+    if (quantity > product.quantity) {
+      alert("Not enough stock!");
+      return;
+    }
+
+    setCart(
+      cart.map((item) => (item.id === id ? { ...item, quantity } : item)),
+    );
+  };
 
   const decreaseQty = (id) => {
     setCart(
@@ -278,8 +292,6 @@ function Sales() {
             email: user.email,
             amount: finalTotal,
             cart,
-            phone: formatPhone(momoNumber),
-            provider: getProvider(momoNumber),
           }),
         });
 
@@ -416,7 +428,7 @@ function Sales() {
       </div>
 
       {/* RIGHT: CART */}
-      <div className="w-[19rem] bg-white p-4 rounded shadow flex flex-col ">
+      <div className="w-[20rem] bg-white p-4 rounded shadow flex flex-col ">
         <h2 className="text-xl font-bold mb-4">Cart</h2>
 
         <div className="flex-1 overflow-y-auto">
@@ -427,11 +439,11 @@ function Sales() {
               {cart.map((item) => (
                 <li
                   key={item.id}
-                  className="p-3 gap-2 bg-white rounded-lg border flex h-20 overflow-hidden items-center w-[100%]"
+                  className="p-3 gap-2 bg-white rounded-lg border flex h-20 overflow-hidden items-end w-[100%]"
                 >
                   <div className="bg-gray-100 rounded-xl aspect-square h-[100%]"></div>
                   {/* LEFT SIDE */}
-                  <div className="flex flex-1 justify-between">
+                  <div className="flex flex-1 justify-between items-end">
                     <div className="flex flex-col">
                       <p className="font-semibold text-sm line-clamp-2">
                         {item.name}
@@ -445,26 +457,35 @@ function Sales() {
                     </div>
 
                     {/* RIGHT SIDE */}
-                    <div className="flex flex-col self-end">
-                      {/* <div>
-                        <button
+                    <div className="flex flex-col items-center self-end">
+                      <div className="flex self-end">
+                        {/* <button
                           onClick={() => decreaseQty(item.id)}
                           className="px-2 bg-red-500 text-white rounded"
                         >
                           -
-                        </button>
+                        </button> */}
+                        <input
+                          type="number"
+                          min="1"
+                          // max={item.maxQuantity}
+                          value={item.quantity}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) =>
+                            updateQty(item.id, parseInt(e.target.value))
+                          }
+                          className="mx-2 w-12 text-sm border p-1 rounded text-center"
+                        />
 
-                        <span>{item.quantity}</span>
-
-                        <button
+                        {/* <button
                           onClick={() => increaseQty(item.id)}
                           className="px-2 bg-green-500 text-white rounded"
                         >
                           +
-                        </button>
-                      </div> */}
-                      <p className="text-xs font-semibold text-blue-500 pt-[0.1rem]">
-                        GH¢{Number(item.price).toFixed(2)}
+                        </button> */}
+                      </div>
+                      <p className="text-xs font-semibold text-blue-500">
+                        GH¢{Number(item.price * item.quantity).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -500,6 +521,7 @@ function Sales() {
                   onClick={() => {
                     setPaymentMethod(item.paymentMethod);
                   }}
+                  className="cursor-pointer hover:scale-105 transition-all ease-in"
                 >
                   <div
                     className={`border border-blue-400 ${paymentMethod == item.paymentMethod && "bg-blue-100/70"} w-[4.8rem] aspect-[16/10] rounded-lg flex-1 flex justify-center items-center`}
@@ -522,16 +544,6 @@ function Sales() {
             <option>Mobile Money</option>
             <option>Card</option>
           </select> */}
-
-          {paymentMethod === "Mobile Money" && (
-            <input
-              type="text"
-              placeholder="Enter MoMo number"
-              value={momoNumber}
-              onChange={(e) => setMomoNumber(e.target.value)}
-              className="mt-2 p-2 border w-full rounded"
-            />
-          )}
 
           <input
             type="number"

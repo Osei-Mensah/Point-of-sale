@@ -172,9 +172,10 @@ function Products() {
       .catch((err) => console.error(err));
   }, []);
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">Products</h1>
-      <form onSubmit={handleSubmit} className="mb-6 space-y-2">
+    <div className=" flex h-full overflow-hidden">
+      <div className="flex-1 overflow-auto scroll-hidden p-4">
+        <h1 className="text-3xl font-bold mb-4">Products</h1>
+        {/* <form onSubmit={handleSubmit} className="mb-6 space-y-2">
         <input
           type="text"
           name="name"
@@ -283,9 +284,9 @@ function Products() {
             Cancel
           </button>
         )}
-      </form>
+      </form> */}
 
-      <div className="mb-6">
+        {/* <div className="mb-6">
         <h2 className="text-xl font-bold mb-2">Import Products (CSV)</h2>
 
         <input
@@ -345,35 +346,215 @@ function Products() {
             <p>Fix errors before uploading.</p>
           </div>
         )}
+      </div> */}
+
+        {products.length === 0 ? (
+          <p>No products yet</p>
+        ) : (
+          <ul className="space-y-2">
+            {products.map((product) => (
+              <li
+                key={product.id}
+                className={`p-4 rounded shadow ${
+                  product.quantity === 0
+                    ? "bg-gray-200"
+                    : product.quantity <= 5
+                      ? "bg-yellow-100 border border-yellow-400"
+                      : "bg-white"
+                }`}
+              >
+                {" "}
+                <p className="font-semibold">{product.name}</p>
+                <p>GHS {product.price}</p>
+                <p>
+                  Stock: {product.quantity}
+                  {product.quantity > 0 && product.quantity <= 5 && (
+                    <span className="ml-2 text-yellow-600 font-semibold">
+                      (Low!)
+                    </span>
+                  )}
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      setForm({
+                        name: product.name,
+                        category: product.category || "",
+                        price: product.price,
+                        quantity: product.quantity,
+                      });
+                      setEditingId(product.id);
+                    }}
+                    className="bg-yellow-500 text-white px-3 py-1 rounded"
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    onClick={() => deleteProduct(product.id)}
+                    className="bg-red-600 text-white px-3 py-1 rounded"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      {products.length === 0 ? (
-        <p>No products yet</p>
-      ) : (
-        <ul className="space-y-2">
-          {products.map((product) => (
-            <li
-              key={product.id}
-              className={`p-4 rounded shadow ${
-                product.quantity === 0
-                  ? "bg-gray-200"
-                  : product.quantity <= 5
-                    ? "bg-yellow-100 border border-yellow-400"
-                    : "bg-white"
-              }`}
+      <div className="w-[20rem] bg-white px-5 py-8 rounded shadow">
+        <h2 className="text-lg font-bold mb-1">
+          {editingId ? "Edit Product" : "New Product"}
+        </h2>
+        <form onSubmit={handleSubmit} className="mb-5 space-y-2">
+          <input
+            type="text"
+            name="name"
+            value={form.name}
+            placeholder="Product Name"
+            onChange={handleChange}
+            className="border p-2 w-full"
+            required
+          />
+
+          <input
+            type="text"
+            name="category"
+            value={form.category}
+            placeholder="Category"
+            onChange={handleChange}
+            className="border p-2 w-full"
+          />
+
+          <input
+            type="number"
+            name="price"
+            value={form.price}
+            placeholder="Price"
+            onChange={handleChange}
+            className="border p-2 w-full"
+            required
+          />
+
+          <input
+            type="number"
+            name="quantity"
+            value={form.quantity}
+            placeholder="Quantity"
+            onChange={handleChange}
+            className="border p-2 w-full"
+          />
+
+          <button
+            type="submit"
+            className={`px-4 py-2 rounded text-white ${
+              editingId ? "bg-yellow-500" : "bg-blue-600"
+            }`}
+          >
+            {editingId ? "Update Product" : "Add Product"}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={() => {
+                setForm({
+                  name: "",
+                  category: "",
+                  price: "",
+                  quantity: "",
+                });
+                setEditingId(null);
+              }}
+              className="ml-2 px-4 py-2 bg-gray-500 text-white rounded"
             >
-              {" "}
-              <p className="font-semibold">{product.name}</p>
-              <p>GHS {product.price}</p>
-              <p>
-                Stock: {product.quantity}
-                {product.quantity > 0 && product.quantity <= 5 && (
-                  <span className="ml-2 text-yellow-600 font-semibold">
-                    (Low!)
-                  </span>
-                )}
+              Cancel
+            </button>
+          )}
+        </form>
+        <div className="">
+          <h2 className="text-lg font-bold mb-1">Import Products (CSV)</h2>
+
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileChange}
+            className="mb-2 border p-2 w-full"
+          />
+
+          <button
+            onClick={handleImport}
+            className="bg-green-600 text-white px-4 py-2 rounded"
+          >
+            Upload CSV
+          </button>
+
+          {previewData.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-bold mb-2">Preview (first 5 rows)</h3>
+              <p className="text-sm text-gray-600">
+                Total rows: {previewData.length}
               </p>
-              <div className="flex gap-2 mt-2">
+
+              <table className="w-full border text-sm">
+                <thead>
+                  <tr>
+                    {Object.keys(previewData[0]).map((key) => (
+                      <th key={key} className="border p-1">
+                        {key}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewData.map((row, i) => (
+                    <tr key={i}>
+                      {Object.values(row).map((val, j) => (
+                        <td key={j} className="border p-1">
+                          {val}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {validationErrors.length > 0 && (
+            <div className="mt-4 text-red-600">
+              <h3 className="font-bold">Validation Errors:</h3>
+              <ul>
+                {validationErrors.slice(0, 5).map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+              <p>Fix errors before uploading.</p>
+            </div>
+          )}
+        </div>
+        <hr className="my-4" />
+        <h2 className="text-lg font-bold mb-1">Low Stock Products</h2>
+        {/* Paginate */}
+        <div>
+          {products
+            .filter((product) => product.quantity <= 5)
+            .sort((a, b) => a.quantity - b.quantity)
+            .map((product) => (
+              <div
+                key={product.id}
+                className="p-3 border-b flex justify-between"
+              >
+                <div className="overfl">
+                  <p className="text-base leading-4 font-medium capitalize text-black">
+                    {product.name}
+                  </p>
+
+                  <p className="text-sm text-gray-600">
+                    {product.quantity} left
+                  </p>
+                </div>
                 <button
+                  className="text-xs font-semibold bg-blue-600 px-2 rounded-md text-white"
                   onClick={() => {
                     setForm({
                       name: product.name,
@@ -383,22 +564,13 @@ function Products() {
                     });
                     setEditingId(product.id);
                   }}
-                  className="bg-yellow-500 text-white px-3 py-1 rounded"
                 >
-                  Edit
-                </button>
-
-                <button
-                  onClick={() => deleteProduct(product.id)}
-                  className="bg-red-600 text-white px-3 py-1 rounded"
-                >
-                  Delete
+                  Restock
                 </button>
               </div>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+        </div>
+      </div>
     </div>
   );
 }
