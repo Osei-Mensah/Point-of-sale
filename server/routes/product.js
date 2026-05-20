@@ -21,6 +21,16 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     console.error("DELETE PRODUCT ERROR:", error);
 
+    if (
+      error.message.includes(
+        'violates foreign key constraint "sales_items_product_id_fkey"',
+      )
+    ) {
+      return res.status(400).json({
+        error: "Cannot delete product because it exists in sales history.",
+      });
+    }
+
     res.status(500).json({
       error: error.message,
     });
@@ -153,13 +163,12 @@ router.post(
               await db.query(
                 `
       INSERT INTO products (
-        name,
-        category,
-        price,
-        quantity
-        
-      )
-      VALUES ($1, $2, $3, $4)
+  name,
+  category,
+  price,
+  quantity
+)
+VALUES ($1, $2, $3, $4)
       `,
                 [name, category, price, quantity],
               );
