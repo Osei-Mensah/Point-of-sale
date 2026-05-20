@@ -46,6 +46,7 @@ function Sales() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [amountPaid, setAmountPaid] = useState("");
   const [momoNumber, setMomoNumber] = useState("");
@@ -179,9 +180,16 @@ function Sales() {
   };
 
   const filteredProducts = Array.isArray(products)
-    ? products.filter((product) =>
-        product.name.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? products.filter((product) => {
+        const matchesSearch = product.name
+          .toLowerCase()
+          .includes(search.toLowerCase());
+
+        const matchesCategory =
+          selectedCategory === "All" || product.category === selectedCategory;
+
+        return matchesSearch && matchesCategory;
+      })
     : [];
   const addToCart = (product) => {
     const existing = cart.find((item) => item.id === product.id);
@@ -329,20 +337,37 @@ function Sales() {
             className={`mb-4 flex gap-2 flex-wrap ${search.trim() !== "" && "hidden"}`}
           >
             {[
-              { icon: LayoutGrid, category: "All" },
-              { icon: Cpu, category: "Electricals & Electronics" },
-              { icon: Snowflake, category: "AC & Refrigeration" },
-              { icon: Flame, category: "LPG Products" },
-              { icon: Hammer, category: "Hardware" },
-              { icon: Boxes, category: "General" },
-            ].map((item) => {
-              const Icon = item.icon;
+              "All",
+              ...new Set(
+                products
+                  .map((product) => product.category?.trim())
+                  .filter(Boolean),
+              ),
+            ].map((category) => {
+              const Icon =
+                category === "All"
+                  ? LayoutGrid
+                  : category.toLowerCase().includes("drink")
+                    ? Flame
+                    : category.toLowerCase().includes("tool")
+                      ? Hammer
+                      : category.toLowerCase().includes("elect")
+                        ? Cpu
+                        : Boxes;
               return (
-                <div className="flex flex-col aspect-square w-[5.6rem] p-3 rounded-lg shadow bg-white cursor-pointer hover:shadow-md">
+                <div
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={`flex flex-col aspect-square w-[5.6rem] p-3 rounded-lg shadow cursor-pointer hover:shadow-md transition ${
+                    selectedCategory === category
+                      ? "bg-blue-100 border border-blue-400"
+                      : "bg-white"
+                  }`}
+                >
                   <Icon />
                   <div className="mt-3">
                     <p className="text-sm leading-3 font-semibold line-clamp-1">
-                      {item.category}
+                      {category}
                     </p>
                     <p className="text-[0.69rem] font-normal text-wrap overflow-hidden text-blue-400">
                       103 items
